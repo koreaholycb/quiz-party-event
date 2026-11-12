@@ -8,7 +8,7 @@ app.use(express.static('public'));
 const QSEC = 7;                                        // 초성 문제당 제한시간(초)
 const RACE_POINTS = i => Math.max(100 - i * 3, 10);    // 달리기 순위별 점수: 1등 100점, 이후 3점씩 감소, 최소 10점
 
-const S = { phase: 'idle', teams: ['1팀', '2팀', '3팀', '4팀', '5팀'], players: {}, deck: [], qn: 0, q: null,
+const S = { phase: 'idle', teams: ['1팀', '2팀', '3팀', '4팀', '5팀', '6팀', '7팀', '8팀', '9팀'], players: {}, deck: [], qn: 0, q: null,
   qStart: 0, correct: {}, raceSec: 10, raceStart: 0, timer: null, gen: 0 };
 const norm = s => String(s).replace(/\s/g, '').toLowerCase();
 const shown = a => a.filter(x => !x.startsWith('~')).join(' / ');
