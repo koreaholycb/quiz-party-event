@@ -48,7 +48,7 @@ button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
 <section id="wait" hidden>
   <h1 id="who"></h1>
   <p class="sub">곧 시작해요. 화면을 켜 두세요!</p>
-  <div class="card"><p class="big" id="my"></p><p style="margin:0">게임이 끝날 때마다 점수가 업데이트돼요</p></div>
+  <div class="card"><p style="margin:0">관리자가 시작하면 문제가 나와요.</p></div>
 </section>
 
 <section id="quiz" hidden>
@@ -90,7 +90,7 @@ function join() {
   s.emit('hello', { id, name, team }, r => {
     if (r.err) { joined = false; $('err').textContent = r.err; return; }
     joined = true; L.qp_name = r.name; L.qp_team = r.team; team = r.team;
-    $('who').textContent = `${r.name} · ${r.team}`; $('my').textContent = r.score + '점';
+    $('who').textContent = `${r.name} · ${r.team}`;
   });
 }
 $('go').onclick = join;
@@ -111,6 +111,11 @@ s.on('phase', d => {
   if (d.phase === 'quiz') startQ(d);
   else if (d.phase === 'raceCount') { show('race'); cnt = 0; $('rc').textContent = '준비!'; $('tap').disabled = true; $('tap').textContent = '…'; }
   else if (d.phase === 'race') { show('race'); cnt = 0; $('rc').textContent = '달려요!'; $('tap').disabled = false; $('tap').textContent = 'TAP!'; }
+  else if (d.phase === 'quizWait') {
+    show('quiz'); $('top').textContent = `${d.qn}번째 문제`; $('hint').textContent = d.q.hint; $('qq').textContent = d.q.q;
+    $('bar').style.transition = 'none'; $('bar').style.width = '0'; $('ans').disabled = true;
+    $('msg').textContent = done ? '정답을 맞혔어요! 정답 발표를 기다려요…' : '시간 끝! 정답 발표를 기다려요…';
+  }
   else if (d.phase === 'idle') show('wait');
   else if ($('res').hidden) show('wait');
 });
@@ -121,22 +126,23 @@ $('qf').onsubmit = e => {
   e.preventDefault();
   const v = $('ans').value.trim();
   if (!v || done) return;
-  s.emit('answer', v, g => {
-    if (g) { done = true; $('ans').disabled = true; $('ans').value = ''; $('msg').textContent = `정답! +${g}점 🎉 결과를 기다려요`; }
-    else { $('ans').value = ''; $('ans').classList.add('shake'); setTimeout(() => $('ans').classList.remove('shake'), 300); }
+  s.emit('answer', v, r => {
+    if (r === true) { done = true; $('ans').disabled = true; $('ans').value = ''; $('msg').textContent = '정답! 🎉'; }
+    else if (r === 'late') $('msg').textContent = '시간이 끝났어요';
+    else { $('ans').value = ''; $('msg').textContent = '오답 ✗ 다시 도전!'; $('ans').classList.add('shake'); setTimeout(() => $('ans').classList.remove('shake'), 300); }
   });
 };
 s.on('reveal', x => {
-  show('res'); $('my').textContent = x.score + '점';
-  $('rt').textContent = x.gained ? `정답! +${x.gained}점` : '아쉬워요!';
-  $('rb').innerHTML = `정답: <b>${esc(x.answer)}</b><br>내 점수 ${x.score}점 · 전체 ${x.rank}/${x.total}등`;
+  show('res');
+  $('rt').textContent = x.ok ? '정답!' : '아쉬워요!';
+  $('rb').innerHTML = `정답: <b>${esc(x.answer)}</b>`;
 });
 s.on('count', n => { $('rc').textContent = n; });
 $('tap').onpointerdown = () => { if (phase !== 'race') return; cnt++; pend++; $('tap').textContent = cnt; };
 setInterval(() => { if (pend) { s.emit('tap', pend); pend = 0; } }, 300);
 s.on('raceEnd', x => {
-  pend = 0; show('res'); $('my').textContent = x.score + '점';
-  $('rt').textContent = x.gained ? `달리기 +${x.gained}점` : '달리기 끝!';
-  $('rb').innerHTML = `${x.taps}번 달렸어요<br>달리기 ${x.raceRank ? x.raceRank + '등' : '기록 없음'} · 전체 ${x.rank}/${x.total}등`;
+  pend = 0; show('res');
+  $('rt').textContent = '달리기 끝!';
+  $('rb').innerHTML = `${x.taps}번 달렸어요!`;
 });
 </script></body></html>

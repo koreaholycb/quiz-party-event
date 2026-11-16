@@ -56,11 +56,13 @@ li.off{opacity:.5}
   <div class="top"><h1>송년회 관리자</h1><span class="chip" id="ph"></span><span id="cn"></span></div>
 
   <div class="card row">
+    <button id="rv" class="g">정답 확인 ✔</button>
     <button id="nq">다음 문제 ▶</button>
     <span>|</span>
     <select id="rs" aria-label="달리기 시간"><option value="10">달리기 10초</option><option value="15">15초</option><option value="20">20초</option><option value="30">30초</option></select>
     <button id="rc">달리기 시작 🏃</button>
     <button id="sp" class="g">중단</button>
+    <button id="tg" class="g">순위 숨기기</button>
   </div>
 
   <div class="card stage">
@@ -72,7 +74,7 @@ li.off{opacity:.5}
     <div id="rtop" class="mut"></div>
   </div>
 
-  <div class="cols">
+  <div class="cols" id="ranks">
     <div class="card"><b>팀 순위 (팀원 평균 점수)</b><ol id="tl"></ol></div>
     <div class="card"><b>개인 순위</b><div class="scroll"><ol id="bd"></ol></div></div>
   </div>
@@ -96,7 +98,7 @@ li.off{opacity:.5}
 const $ = id => document.getElementById(id), s = io();
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const medal = i => ['🥇', '🥈', '🥉'][i] || i + 1;
-const NAMES = { idle: '대기 중', quiz: '초성 퀴즈 진행 중', quizEnd: '문제 종료', raceCount: '달리기 준비', race: '달리기 진행 중', raceEnd: '달리기 종료' };
+const NAMES = { idle: '대기 중', quiz: '초성 퀴즈 진행 중', quizWait: '시간 종료 · 정답 확인 대기', quizReveal: '정답 공개', raceCount: '달리기 준비', race: '달리기 진행 중', raceEnd: '달리기 종료' };
 let pw = sessionStorage.getItem('pw') || '', last = null, lastQn = -1, raceEndAt = 0, teamsSet = false;
 
 function login() {
@@ -113,10 +115,10 @@ $('out').onclick = () => { sessionStorage.removeItem('pw'); location.reload(); }
 
 s.on('admin', d => {
   last = d;
-  const free = ['idle', 'quizEnd', 'raceEnd'].includes(d.phase);
+  const free = ['idle', 'quizReveal', 'raceEnd'].includes(d.phase);
   $('ph').textContent = NAMES[d.phase] || d.phase;
   $('cn').textContent = `접속 ${d.online}명 / 등록 ${d.total}명`;
-  $('nq').disabled = !free; $('rc').disabled = !free; $('sp').disabled = free;
+  $('nq').disabled = !free; $('rc').disabled = !free; $('sp').disabled = free; $('rv').disabled = d.phase !== 'quizWait';
   $('nq').textContent = d.qn ? `다음 문제 ▶ (${d.qn}번 진행됨)` : '첫 문제 시작 ▶';
   if (!teamsSet) { $('tn').value = d.teams.map(t => t.team).join(','); teamsSet = true; }
 
@@ -124,8 +126,9 @@ s.on('admin', d => {
   $('lanes').hidden = !inRace; $('qt').hidden = d.phase !== 'quiz';
   $('sHint').textContent = d.q ? d.q.hint : '';
   if (d.phase === 'idle') { $('sBig').textContent = '준비 완료'; $('sNote').textContent = `참가자를 기다리는 중 · ${d.online}명 접속`; }
-  if (d.q && d.phase === 'quiz') { $('sBig').textContent = d.q.q; $('sNote').textContent = `${d.correctN}명 정답`; }
-  if (d.phase === 'quizEnd') { $('sBig').textContent = d.q.q; $('sNote').textContent = `정답: ${d.q.answer} · ${d.correctN}명 정답`; }
+  if (d.phase === 'quiz') { $('sBig').textContent = d.q.q; $('sNote').textContent = '정답을 입력해 주세요!'; }
+  if (d.phase === 'quizWait') { $('sBig').textContent = d.q.q; $('sNote').textContent = '시간 종료! 곧 정답을 공개해요'; }
+  if (d.phase === 'quizReveal') { $('sHint').textContent = `${d.q.hint} · ${d.q.q}`; $('sBig').textContent = d.q.answer; $('sNote').textContent = `${d.correctN}명이 맞혔어요`; }
   if (d.phase === 'raceCount') { $('sBig').textContent = '달리기 준비!'; $('sNote').textContent = '곧 시작해요'; }
   if (d.phase === 'race') { raceEndAt = Date.now() + d.raceLeft; $('sNote').textContent = '최대한 빨리 누르세요!'; }
   if (d.phase === 'raceEnd') { $('sBig').textContent = '달리기 끝!'; $('sNote').textContent = '팀 순위를 확인하세요'; }
@@ -149,6 +152,8 @@ s.on('admin', d => {
 setInterval(() => { if (last && last.phase === 'race') $('sBig').textContent = '🏃 ' + Math.max(0, Math.ceil((raceEndAt - Date.now()) / 1000)) + '초'; }, 200);
 
 $('nq').onclick = () => s.emit('nextQ');
+$('rv').onclick = () => s.emit('reveal');
+$('tg').onclick = () => { const h = $('ranks').hidden = !$('ranks').hidden; $('tg').textContent = h ? '순위 보이기' : '순위 숨기기'; };
 $('rc').onclick = () => s.emit('race', Number($('rs').value));
 $('sp').onclick = () => { if (confirm('진행 중인 게임을 중단할까요?')) s.emit('stop'); };
 $('tb').onclick = () => s.emit('teams', $('tn').value);
