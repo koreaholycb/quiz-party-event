@@ -8,13 +8,13 @@ app.use(express.static('public'));
 const QSEC = 7;                                        // 초성 문제당 제한시간(초)
 const RACE_POINTS = i => Math.max(100 - i * 3, 10);    // 달리기 순위별 점수: 1등 100점, 이후 3점씩 감소, 최소 10점
 
-const S = { phase: 'idle', teams: ['1팀', '2팀', '3팀', '4팀', '5팀', '6팀', '7팀', '8팀', '9팀'], players: {}, deck: [], qn: 0, q: null,
+const S = { phase: 'idle', teams: ['1팀', '2팀', '3팀', '4팀', '5팀'], players: {}, deck: [], qn: 0, q: null,
   qStart: 0, correct: {}, raceSec: 10, raceStart: 0, timer: null, gen: 0 };
 const norm = s => String(s).replace(/\s/g, '').toLowerCase();
 const shown = a => a.filter(x => !x.startsWith('~')).join(' / ');
 const list = () => Object.values(S.players);
 const ranked = () => { const o = list().sort((a, b) => b.score - a.score); o.forEach((p, i) => p.rank = i + 1); return o; };
-const free = () => ['idle', 'quizEnd', 'raceEnd'].includes(S.phase);
+const free = () => ['idle', 'quizReveal', 'raceEnd'].includes(S.phase);
 const shuffle = a => a.map(x => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map(p => p[1]);
 const teamStats = () => S.teams.map(t => {
   const m = list().filter(p => p.team === t), n = m.length;
@@ -23,17 +23,17 @@ const teamStats = () => S.teams.map(t => {
 });
 const phaseView = () => ({
   phase: S.phase, teams: S.teams, qn: S.qn, sec: QSEC,
-  q: S.phase === 'quiz' ? { hint: S.q.hint, q: S.q.q } : null,
+  q: ['quiz', 'quizWait'].includes(S.phase) ? { hint: S.q.hint, q: S.q.q } : null,
   left: S.phase === 'quiz' ? Math.max(QSEC * 1000 - (Date.now() - S.qStart), 0) : 0,
 });
 
 let pushedAt = 0;
 function push(force) {
   const now = Date.now(); if (!force && now - pushedAt < 400) return; pushedAt = now;
-  const o = ranked(), inQ = S.phase === 'quiz', hasQ = inQ || S.phase === 'quizEnd';
+  const o = ranked(), inQ = S.phase === 'quiz', hasQ = ['quiz', 'quizWait', 'quizReveal'].includes(S.phase);
   io.to('admin').emit('admin', {
     phase: S.phase, qn: S.qn, sec: QSEC, raceSec: S.raceSec,
-    q: hasQ ? { hint: S.q.hint, q: S.q.q, answer: inQ ? null : shown(S.q.a) } : null,
+    q: hasQ ? { hint: S.q.hint, q: S.q.q, answer: S.phase === 'quizReveal' ? shown(S.q.a) : null } : null,
     left: inQ ? Math.max(QSEC * 1000 - (now - S.qStart), 0) : 0,
     raceLeft: S.phase === 'race' ? Math.max(S.raceSec * 1000 - (now - S.raceStart), 0) : 0,
     correctN: Object.keys(S.correct).length,
@@ -54,10 +54,15 @@ function nextQ() {
   io.emit('phase', phaseView()); push(true);
   clearTimeout(S.timer); S.timer = setTimeout(() => { if (g === S.gen) endQ(); }, QSEC * 1000);
 }
-function endQ() {
-  S.phase = 'quizEnd';
-  const o = ranked(), answer = shown(S.q.a);
-  o.forEach(p => p.sid && io.to(p.sid).emit('reveal', { answer, gained: S.correct[p.id] || 0, score: p.score, rank: p.rank, total: o.length }));
+function endQ() {   // 7초 종료: 정답은 아직 공개하지 않고, 관리자가 "정답 확인"을 누를 때까지 기다려요
+  S.phase = 'quizWait';
+  io.emit('phase', phaseView()); push(true);
+}
+function revealQ() {   // 관리자가 "정답 확인"을 누르면 참가자 폰과 관리자 화면에 동시에 공개
+  if (S.phase !== 'quizWait') return;
+  S.phase = 'quizReveal';
+  const answer = shown(S.q.a);
+  list().forEach(p => p.sid && io.to(p.sid).emit('reveal', { answer, ok: !!S.correct[p.id] }));
   push(true);
 }
 function startRace(sec) {
@@ -78,10 +83,7 @@ function endRace() {
   S.phase = 'raceEnd';
   const order = list().filter(p => p.taps > 0).sort((a, b) => b.taps - a.taps), gain = {};
   order.forEach((p, i) => { gain[p.id] = RACE_POINTS(i); p.score += gain[p.id]; });
-  const o = ranked();
-  o.forEach(p => p.sid && io.to(p.sid).emit('raceEnd', {
-    taps: p.taps, gained: gain[p.id] || 0, raceRank: order.findIndex(x => x.id === p.id) + 1,
-    score: p.score, rank: p.rank, total: o.length }));
+  list().forEach(p => p.sid && io.to(p.sid).emit('raceEnd', { taps: p.taps }));   // 점수·순위는 참가자에게 보내지 않아요
   push(true);
 }
 function stop() { S.gen++; clearTimeout(S.timer); S.phase = 'idle'; io.emit('phase', phaseView()); push(true); }
@@ -102,16 +104,17 @@ io.on('connection', s => {
       p = S.players[id] = { id, name, team: d.team, score: 0, taps: 0, last: 0 };
     }
     p.sid = s.id; me = p;
-    cb({ ok: 1, name: p.name, team: p.team, score: p.score });
+    cb({ ok: 1, name: p.name, team: p.team });
     s.emit('phase', phaseView());
     push();
   });
   s.on('answer', (t, cb) => {
-    if (!me || S.phase !== 'quiz' || S.correct[me.id] || typeof cb !== 'function') return;
-    const el = Date.now() - S.qStart; if (el > QSEC * 1000 + 300) return;
+    if (!me || typeof cb !== 'function' || S.correct[me.id]) return;
+    const el = Date.now() - S.qStart;
+    if (S.phase !== 'quiz' || el > QSEC * 1000 + 300) return cb('late');
     if (!S.q.a.some(a => norm(a.replace(/^~/, '')) === norm(t))) return cb(false);
     const g = 50 + Math.round(50 * Math.max(QSEC * 1000 - el, 0) / (QSEC * 1000));
-    me.score += g; S.correct[me.id] = g; cb(g); push();
+    me.score += g; S.correct[me.id] = g; cb(true); push();   // 점수는 관리자 화면에만 보여요
   });
   s.on('tap', n => {
     if (!me || S.phase !== 'race') return;
@@ -133,6 +136,7 @@ io.on('connection', s => {
   });
   const A = (ev, fn) => s.on(ev, (...a) => { if (s.isAdmin) fn(...a); });
   A('nextQ', nextQ);
+  A('reveal', revealQ);
   A('race', sec => startRace(Number(sec)));
   A('stop', stop);
   A('teams', str => {
