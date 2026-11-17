@@ -9,8 +9,9 @@
 :root{--bg:#2b3bff;--ink:#12122b;--y:#ffe14d;--p:#ff6fb1;--soft:#eef0ff}
 *{box-sizing:border-box}
 body{margin:0;min-height:100dvh;background:var(--bg);color:#fff;font-family:Jua,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom)}
-main{max-width:980px;margin:0 auto;padding:20px 0 40px}
+main{max-width:1000px;margin:0 auto;padding:20px 0 40px}
 h1{font-size:34px;margin:0;font-weight:400}
+h2{font-size:30px;margin:0 0 8px;font-weight:400}
 .top{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
 .chip{background:var(--y);color:var(--ink);border:3px solid var(--ink);border-radius:99px;padding:2px 14px}
 .card{background:#fff;color:var(--ink);border:3px solid var(--ink);border-radius:20px;box-shadow:5px 5px 0 var(--ink);padding:16px;margin-bottom:16px}
@@ -28,19 +29,30 @@ input:focus-visible,button:focus-visible,select:focus-visible{outline:3px solid 
 #sNote{font-size:24px}
 .track{height:16px;background:var(--soft);border:3px solid var(--ink);border-radius:9px;overflow:hidden;margin:10px auto;max-width:600px}
 #bar{height:100%;width:0;background:var(--p)}
-.lane{display:flex;align-items:center;gap:10px;margin:8px 0;text-align:left}
-.lane b{width:84px;flex:none}
-.lane .t{flex:1;height:26px;background:var(--soft);border-radius:13px;border:2px solid var(--ink);overflow:hidden}
-.lane .f{height:100%;width:0;background:var(--p);transition:width .4s linear}
-.lane span{width:72px;text-align:right;flex:none}
-.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:720px){.cols{grid-template-columns:1fr}}
+#lanes{--rh:60px;max-width:900px;margin:14px auto 0}
+.lane{display:flex;align-items:center;gap:10px;margin:6px 0;text-align:left}
+.lane b{width:100px;flex:none;line-height:1.1}
+.lane b small{display:block;font-weight:400;opacity:.6}
+.lane .t{position:relative;flex:1;height:calc(var(--rh) + 10px);background:var(--soft);border-radius:14px;border:2px solid var(--ink);background-image:repeating-linear-gradient(90deg,transparent 0 48px,#dfe2ff 48px 50px)}
+.lane .t::after{content:'';position:absolute;right:0;top:0;bottom:0;width:14px;background:repeating-conic-gradient(var(--ink) 0 25%,#fff 0 50%) 0 0/14px 14px;border-radius:0 11px 11px 0}
+.lane .r{position:absolute;top:50%;left:0;margin-top:calc(var(--rh) / -2);transition:left .4s linear,transform .4s linear;z-index:1}
+.lane span{width:64px;text-align:right;flex:none}
+.runner svg{display:block;height:var(--rh);width:auto;overflow:visible}
+.runner .l1,.runner .l2{transform-origin:22px 40px}
+.runner .a1,.runner .a2{transform-origin:22px 24px}
+.runner.run .l1,.runner.run .a2{animation:sw .3s ease-in-out infinite alternate}
+.runner.run .l2,.runner.run .a1{animation:sw .3s ease-in-out infinite alternate-reverse}
+.runner.run svg{animation:bob .3s ease-in-out infinite alternate}
+@keyframes sw{from{transform:rotate(-35deg)}to{transform:rotate(35deg)}}
+@keyframes bob{to{transform:translateY(-3px)}}
+@media(prefers-reduced-motion:reduce){.runner.run *{animation:none!important}}
 ol{list-style:none;padding:0;margin:8px 0 0}
 li{display:flex;gap:10px;align-items:center;background:var(--soft);padding:8px 12px;border-radius:12px;margin-bottom:6px}
-li .r{margin-left:auto;white-space:nowrap}
+li.hi{font-size:24px;padding:12px 16px}
+li .r2{margin-left:auto;white-space:nowrap}
 li button{padding:2px 10px;font-size:14px;box-shadow:none;margin-left:8px}
 li.off{opacity:.5}
-.scroll{max-height:460px;overflow:auto}
+.scroll{max-height:520px;overflow:auto}
 .err{color:#ffd0e3;min-height:1.2em}
 .mut{opacity:.6;margin:6px 0 0}
 [hidden]{display:none!important}
@@ -56,27 +68,34 @@ li.off{opacity:.5}
   <div class="top"><h1>송년회 관리자</h1><span class="chip" id="ph"></span><span id="cn"></span></div>
 
   <div class="card row">
+    <button id="st">초성 게임 시작 ▶</button>
     <button id="rv" class="g">정답 확인 ✔</button>
     <button id="nq">다음 문제 ▶</button>
+    <button id="rk" class="g">순위 발표 🏆</button>
     <span>|</span>
     <select id="rs" aria-label="달리기 시간"><option value="10">달리기 10초</option><option value="15">15초</option><option value="20">20초</option><option value="30">30초</option></select>
     <button id="rc">달리기 시작 🏃</button>
     <button id="sp" class="g">중단</button>
-    <button id="tg" class="g">순위 숨기기</button>
   </div>
 
-  <div class="card stage">
+  <div class="card stage" id="stage">
     <div id="sHint"></div>
     <div id="sBig"></div>
     <div class="track" id="qt" hidden><div id="bar"></div></div>
     <div id="sNote"></div>
-    <div id="lanes" hidden style="max-width:700px;margin:14px auto 0"></div>
-    <div id="rtop" class="mut"></div>
+    <div id="lanes" hidden></div>
   </div>
 
-  <div class="cols" id="ranks">
-    <div class="card"><b>팀 순위 (팀원 평균 점수)</b><ol id="tl"></ol></div>
-    <div class="card"><b>개인 순위</b><div class="scroll"><ol id="bd"></ol></div></div>
+  <div class="card" id="rankcard" hidden>
+    <h2 id="rkT"></h2>
+    <div id="rkTeams"></div>
+    <b>개인 순위 (누적 점수 · 이번 게임 점수)</b>
+    <div class="scroll"><ol id="rkList"></ol></div>
+  </div>
+
+  <div class="card">
+    <button id="tg" class="g">참가자 관리 보기</button>
+    <div id="live" hidden><p class="mut">여기는 참가자 삭제용이에요. 빔프로젝터에 띄우기 전에는 닫아 두세요.</p><div class="scroll"><ol id="bd"></ol></div></div>
   </div>
 
   <div class="card">
@@ -98,8 +117,19 @@ li.off{opacity:.5}
 const $ = id => document.getElementById(id), s = io();
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const medal = i => ['🥇', '🥈', '🥉'][i] || i + 1;
-const NAMES = { idle: '대기 중', quiz: '초성 퀴즈 진행 중', quizWait: '시간 종료 · 정답 확인 대기', quizReveal: '정답 공개', raceCount: '달리기 준비', race: '달리기 진행 중', raceEnd: '달리기 종료' };
-let pw = sessionStorage.getItem('pw') || '', last = null, lastQn = -1, raceEndAt = 0, teamsSet = false;
+const NAMES = { idle: '대기 중', quiz: '초성 퀴즈 진행 중', quizWait: '시간 종료 · 정답 확인 대기', quizReveal: '정답 공개', quizRank: '초성 게임 순위 발표',
+  raceCount: '달리기 준비', race: '달리기 진행 중', raceEnd: '달리기 종료', raceRank: '달리기 순위 발표' };
+const COLORS = ['#ff5d5d', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#14b8a6', '#ec4899', '#84cc16', '#06b6d4', '#f97316', '#6366f1', '#eab308'];
+const runner = c => `<svg viewBox="0 0 44 66" aria-hidden="true">
+<g class="a2"><path d="M22 24 L33 36" stroke="#12122b" stroke-width="5" stroke-linecap="round" fill="none"/></g>
+<g class="l2"><path d="M22 40 L30 62" stroke="#12122b" stroke-width="6" stroke-linecap="round" fill="none"/></g>
+<path d="M22 20 L22 40" stroke="#12122b" stroke-width="14" stroke-linecap="round" fill="none"/>
+<path d="M22 20 L22 40" stroke="${c}" stroke-width="9" stroke-linecap="round" fill="none"/>
+<g class="l1"><path d="M22 40 L14 62" stroke="#12122b" stroke-width="6" stroke-linecap="round" fill="none"/></g>
+<g class="a1"><path d="M22 24 L11 36" stroke="#12122b" stroke-width="5" stroke-linecap="round" fill="none"/></g>
+<circle cx="22" cy="10" r="9" fill="#ffd9b0" stroke="#12122b" stroke-width="2.5"/>
+<circle cx="25.5" cy="9" r="1.5" fill="#12122b"/></svg>`;
+let pw = sessionStorage.getItem('pw') || '', last = null, lastQn = -1, raceEndAt = 0, teamsSet = false, laneKey = '';
 
 function login() {
   if (!pw) return;
@@ -115,47 +145,69 @@ $('out').onclick = () => { sessionStorage.removeItem('pw'); location.reload(); }
 
 s.on('admin', d => {
   last = d;
-  const free = ['idle', 'quizReveal', 'raceEnd'].includes(d.phase);
+  const free = ['idle', 'quizRank', 'raceRank'].includes(d.phase), isRank = d.phase === 'quizRank' || d.phase === 'raceRank';
   $('ph').textContent = NAMES[d.phase] || d.phase;
   $('cn').textContent = `접속 ${d.online}명 / 등록 ${d.total}명`;
-  $('nq').disabled = !free; $('rc').disabled = !free; $('sp').disabled = free; $('rv').disabled = d.phase !== 'quizWait';
-  $('nq').textContent = d.qn ? `다음 문제 ▶ (${d.qn}번 진행됨)` : '첫 문제 시작 ▶';
+  $('st').disabled = !free; $('rc').disabled = !free; $('sp').disabled = free;
+  $('rv').disabled = d.phase !== 'quizWait';
+  $('nq').disabled = d.phase !== 'quizReveal';
+  $('nq').textContent = d.lastQ ? '순위 발표 🏆' : '다음 문제 ▶';
+  $('rk').disabled = !(d.phase === 'raceEnd' || (d.phase === 'quizReveal' && !d.lastQ));
   if (!teamsSet) { $('tn').value = d.teams.map(t => t.team).join(','); teamsSet = true; }
 
+  $('stage').hidden = isRank; $('rankcard').hidden = !isRank;
   const inRace = ['raceCount', 'race', 'raceEnd'].includes(d.phase);
   $('lanes').hidden = !inRace; $('qt').hidden = d.phase !== 'quiz';
-  $('sHint').textContent = d.q ? d.q.hint : '';
+  $('sHint').textContent = d.q ? `${d.qn}/${d.qTotal} · ${d.q.hint}` : '';
   if (d.phase === 'idle') { $('sBig').textContent = '준비 완료'; $('sNote').textContent = `참가자를 기다리는 중 · ${d.online}명 접속`; }
   if (d.phase === 'quiz') { $('sBig').textContent = d.q.q; $('sNote').textContent = '정답을 입력해 주세요!'; }
   if (d.phase === 'quizWait') { $('sBig').textContent = d.q.q; $('sNote').textContent = '시간 종료! 곧 정답을 공개해요'; }
-  if (d.phase === 'quizReveal') { $('sHint').textContent = `${d.q.hint} · ${d.q.q}`; $('sBig').textContent = d.q.answer; $('sNote').textContent = `${d.correctN}명이 맞혔어요`; }
+  if (d.phase === 'quizReveal') { $('sHint').textContent = `${d.qn}/${d.qTotal} · ${d.q.hint} · ${d.q.q}`; $('sBig').textContent = d.q.answer; $('sNote').textContent = `${d.correctN}명이 맞혔어요`; }
   if (d.phase === 'raceCount') { $('sBig').textContent = '달리기 준비!'; $('sNote').textContent = '곧 시작해요'; }
   if (d.phase === 'race') { raceEndAt = Date.now() + d.raceLeft; $('sNote').textContent = '최대한 빨리 누르세요!'; }
-  if (d.phase === 'raceEnd') { $('sBig').textContent = '달리기 끝!'; $('sNote').textContent = '팀 순위를 확인하세요'; }
+  if (d.phase === 'raceEnd') { $('sBig').textContent = d.raceRes.length ? `🏁 ${d.raceRes[0].team} 우승!` : '달리기 끝!'; $('sNote').textContent = '"순위 발표"를 눌러 주세요'; }
   if (d.phase === 'quiz' && lastQn !== d.qn) {
     lastQn = d.qn;
     const b = $('bar'); b.style.transition = 'none'; b.style.width = (d.left / (d.sec * 1000) * 100) + '%';
     requestAnimationFrame(() => requestAnimationFrame(() => { b.style.transition = `width ${d.left}ms linear`; b.style.width = '0'; }));
   }
-  if (inRace) {
-    const max = Math.max(...d.teams.map(t => t.taps), 1);
-    $('lanes').innerHTML = d.teams.map(t => `<div class="lane"><b>${esc(t.team)}</b><div class="t"><div class="f" style="width:${Math.max(t.taps / max * 100, 2)}%"></div></div><span>${t.taps}회</span></div>`).join('');
-    $('rtop').textContent = d.raceTop.length ? '개인 TOP: ' + d.raceTop.map((p, i) => `${i + 1}.${p.name}(${p.taps})`).join('  ') : '';
-  } else $('rtop').textContent = '';
 
-  const ts = [...d.teams].sort((a, b) => b.score - a.score);
-  $('tl').innerHTML = ts.map((t, i) => `<li><b>${medal(i)}</b> ${esc(t.team)} <small>(${t.n}명)</small><span class="r">${t.score}점</span></li>`).join('');
-  $('bd').innerHTML = d.board.length ? d.board.map((p, i) =>
-    `<li class="${p.on ? '' : 'off'}"><b>${medal(i)}</b> ${esc(p.name)} <small>${esc(p.team)}</small><span class="r">${p.score}점<button data-id="${esc(p.id)}" data-n="${esc(p.name)}">삭제</button></span></li>`).join('')
+  if (inRace) {   // 팀별 캐릭터 1명이 팀원 터치 수(합산)만큼 달려요
+    const key = d.teams.map(t => t.team).join('|');
+    if (key !== laneKey) {   // 팀 구성이 바뀔 때만 다시 그려요 (그래야 움직임이 부드러워요)
+      laneKey = key;
+      $('lanes').style.setProperty('--rh', (d.teams.length > 8 ? 36 : d.teams.length > 5 ? 46 : 60) + 'px');
+      $('lanes').innerHTML = d.teams.map((t, i) => `<div class="lane"><b>${esc(t.team)}<small></small></b><div class="t"><i class="r runner">${runner(COLORS[i % COLORS.length])}</i></div><span></span></div>`).join('');
+    }
+    [...$('lanes').children].forEach((el, i) => {
+      const t = d.teams[i], p = Math.min(t.taps / d.goal * 100, 100), r = el.querySelector('.r');
+      r.style.left = p + '%'; r.style.transform = `translateX(-${p}%)`;
+      r.classList.toggle('run', d.phase === 'race');
+      el.querySelector('small').textContent = t.n + '명';
+      el.querySelector('span').textContent = Math.round(t.taps);
+    });
+  }
+
+  if (isRank) {   // 게임이 끝났을 때만 개인 순위를 보여줘요
+    $('rkT').textContent = d.phase === 'quizRank' ? '🏆 초성 게임 순위' : '🏆 달리기 순위';
+    $('rkTeams').innerHTML = d.phase === 'raceRank' && d.raceRes.length
+      ? '<b>팀 경기 결과</b><ol>' + d.raceRes.map((t, i) => `<li><b>${medal(i)}</b> ${esc(t.team)}<span class="r2">터치 ${t.taps} · 팀 보너스 +${t.bonus}점</span></li>`).join('') + '</ol><p></p>' : '';
+    $('rkList').innerHTML = d.board.map((p, i) =>
+      `<li class="${i < 10 ? 'hi' : ''}"><b>${medal(i)}</b> ${esc(p.name)} <small>${esc(p.team)}</small><span class="r2">${p.score}점 <small>(+${p.gain})</small></span></li>`).join('');
+  }
+  if (!$('live').hidden) $('bd').innerHTML = d.board.length ? d.board.map((p, i) =>
+    `<li class="${p.on ? '' : 'off'}"><b>${i + 1}</b> ${esc(p.name)} <small>${esc(p.team)}</small><span class="r2">${p.score}점<button data-id="${esc(p.id)}" data-n="${esc(p.name)}">삭제</button></span></li>`).join('')
     : '<p class="mut">아직 참가자가 없어요</p>';
 });
 setInterval(() => { if (last && last.phase === 'race') $('sBig').textContent = '🏃 ' + Math.max(0, Math.ceil((raceEndAt - Date.now()) / 1000)) + '초'; }, 200);
 
-$('nq').onclick = () => s.emit('nextQ');
+$('st').onclick = () => s.emit('startQuiz');
 $('rv').onclick = () => s.emit('reveal');
-$('tg').onclick = () => { const h = $('ranks').hidden = !$('ranks').hidden; $('tg').textContent = h ? '순위 보이기' : '순위 숨기기'; };
+$('nq').onclick = () => s.emit('next');
+$('rk').onclick = () => s.emit('rank');
 $('rc').onclick = () => s.emit('race', Number($('rs').value));
 $('sp').onclick = () => { if (confirm('진행 중인 게임을 중단할까요?')) s.emit('stop'); };
+$('tg').onclick = () => { const h = $('live').hidden = !$('live').hidden; $('tg').textContent = h ? '참가자 관리 보기' : '참가자 관리 닫기'; if (!h && last) s.emit('auth', pw, () => {}); };
 $('tb').onclick = () => s.emit('teams', $('tn').value);
 $('rsc').onclick = () => { if (confirm('모든 참가자의 점수를 0점으로 되돌릴까요?')) s.emit('resetScores'); };
 $('rall').onclick = () => { if (confirm('참가자를 모두 지우고 처음 상태로 돌릴까요? 되돌릴 수 없어요.')) s.emit('resetAll'); };
@@ -163,7 +215,7 @@ $('bd').onclick = e => { const id = e.target.dataset && e.target.dataset.id; if 
 $('csv').onclick = () => {
   if (!last) return;
   const rows = ['순위,이름,팀,점수', ...last.board.map((p, i) => `${i + 1},"${p.name.replace(/"/g, '""')}","${p.team}",${p.score}`),
-    '', '팀,인원,평균점수', ...last.teams.map(t => `"${t.team}",${t.n},${t.score}`)];
+    '', '팀,인원', ...last.teams.map(t => `"${t.team}",${t.n}`)];
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(['\ufeff' + rows.join('\n')], { type: 'text/csv' }));
   a.download = '송년회_점수.csv'; a.click();

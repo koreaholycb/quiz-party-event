@@ -27,6 +27,10 @@ button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
 .q{font-size:46px;text-align:center;margin:18px 0 6px;letter-spacing:.06em;word-break:keep-all}
 #msg{min-height:1.5em;text-align:center;font-size:20px;margin:6px 0 10px}
 .big{font-size:34px;margin:0 0 8px}
+.mt{position:relative;height:60px;background:#fff;border:3px solid var(--ink);border-radius:30px;margin:6px 0 26px}
+.mt::after{content:'🏁';position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:28px;opacity:.5}
+#mf{height:100%;width:0;background:var(--p);border-radius:27px;transition:width .12s linear}
+#mr{position:absolute;top:50%;left:0;margin-top:-26px;font-style:normal;font-size:44px;line-height:52px;transition:left .12s linear,transform .12s linear}
 #tap{height:240px;font-size:64px;background:var(--p);color:#fff;touch-action:manipulation;user-select:none;-webkit-user-select:none}
 #tap:disabled{opacity:.5}
 .shake{animation:sk .3s}@keyframes sk{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
@@ -48,7 +52,7 @@ button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
 <section id="wait" hidden>
   <h1 id="who"></h1>
   <p class="sub">곧 시작해요. 화면을 켜 두세요!</p>
-  <div class="card"><p style="margin:0">관리자가 시작하면 문제가 나와요.</p></div>
+  <div class="card"><p id="wm" style="margin:0">관리자가 시작하면 문제가 나와요.</p></div>
 </section>
 
 <section id="quiz" hidden>
@@ -76,7 +80,7 @@ button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
 const $ = id => document.getElementById(id), s = io(), L = localStorage;
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let id = L.qp_id || (L.qp_id = Math.random().toString(36).slice(2) + Date.now().toString(36));
-let teams = [], team = L.qp_team || '', joined = false, phase = 'idle', curQ = -1, done = false, cnt = 0, pend = 0;
+let teams = [], team = L.qp_team || '', joined = false, phase = 'idle', curQ = -1, done = false, cnt = 0, pend = 0, goal = 80;
 const show = x => ['join', 'wait', 'quiz', 'res', 'race'].forEach(k => $(k).hidden = k !== x);
 $('nm').value = L.qp_name || '';
 
@@ -109,14 +113,14 @@ s.on('phase', d => {
   teams = d.teams; phase = d.phase; renderTeams();
   if (!joined) return show('join');
   if (d.phase === 'quiz') startQ(d);
-  else if (d.phase === 'raceCount') { show('race'); cnt = 0; $('rc').textContent = '준비!'; $('tap').disabled = true; $('tap').textContent = '…'; }
-  else if (d.phase === 'race') { show('race'); cnt = 0; $('rc').textContent = '달려요!'; $('tap').disabled = false; $('tap').textContent = 'TAP!'; }
+  else if (d.phase === 'raceCount') { show('race'); $('rc').textContent = '준비!'; $('tap').disabled = true; $('tap').textContent = '…'; }
+  else if (d.phase === 'race') { show('race'); $('rc').textContent = '달려요!'; $('tap').disabled = false; $('tap').textContent = 'TAP!'; }
   else if (d.phase === 'quizWait') {
     show('quiz'); $('top').textContent = `${d.qn}번째 문제`; $('hint').textContent = d.q.hint; $('qq').textContent = d.q.q;
     $('bar').style.transition = 'none'; $('bar').style.width = '0'; $('ans').disabled = true;
     $('msg').textContent = done ? '정답을 맞혔어요! 정답 발표를 기다려요…' : '시간 끝! 정답 발표를 기다려요…';
   }
-  else if (d.phase === 'idle') show('wait');
+  else if (['idle', 'quizRank', 'raceRank'].includes(d.phase)) { show('wait'); $('wm').textContent = d.phase === 'idle' ? '관리자가 시작하면 문제가 나와요.' : '게임 끝! 순위는 큰 화면에서 확인해요 🏆'; }
   else if ($('res').hidden) show('wait');
 });
 s.on('profile', d => { team = d.team; L.qp_team = d.team; });
@@ -138,11 +142,11 @@ s.on('reveal', x => {
   $('rb').innerHTML = `정답: <b>${esc(x.answer)}</b>`;
 });
 s.on('count', n => { $('rc').textContent = n; });
-$('tap').onpointerdown = () => { if (phase !== 'race') return; cnt++; pend++; $('tap').textContent = cnt; };
+$('tap').onpointerdown = () => { if (phase !== 'race') return; pend++; };   // 달리는 모습은 관리자 화면에만 나와요
 setInterval(() => { if (pend) { s.emit('tap', pend); pend = 0; } }, 300);
 s.on('raceEnd', x => {
   pend = 0; show('res');
   $('rt').textContent = '달리기 끝!';
-  $('rb').innerHTML = `${x.taps}번 달렸어요!`;
+  $('rb').innerHTML = '순위는 큰 화면에서 확인해요 👀';
 });
 </script></body></html>
