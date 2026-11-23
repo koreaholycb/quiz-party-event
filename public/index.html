@@ -116,7 +116,7 @@ function startQ(d) {
   if (!done) $('ans').focus();
 }
 s.on('phase', d => {
-  phase = d.phase; $('ver').textContent = `화면 v6 · 서버 ${d.v || '?'}`;
+  phase = d.phase; $('ver').textContent = `화면 v7 · 서버 ${d.v || '?'}`;
   if (!joined) return show('join');
   if (d.phase === 'quiz') startQ(d);
   else if (d.phase === 'raceCount') { show('race'); $('rc').textContent = '준비!'; $('tap').disabled = true; $('tap').textContent = '…'; }
@@ -140,7 +140,7 @@ function startImg(d) {
     imgN = d.qn; idone = false; $('ians').value = ''; $('ians').disabled = false; $('imsg').textContent = '';
     if (d.q.img) $('iimg').src = d.q.img;
   }
-  $('itop').textContent = `${d.qn}번째 문제${d.q.hint ? ' · ' + d.q.hint : ''}`;
+  $('itop').textContent = `${d.qn}번째 문제`;
   $('icard').hidden = !d.q.img; $('iqf').hidden = !!d.q.offline;
   $('inote').textContent = d.q.offline ? '정답은 말로 외쳐 주세요! 🙋' : '큰 화면을 보고 맞혀 보세요!';
   $('inote').hidden = !!d.q.img && !d.q.offline;

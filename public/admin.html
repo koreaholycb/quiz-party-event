@@ -145,7 +145,7 @@ const runner = c => `<svg viewBox="0 0 44 66" aria-hidden="true">
 <g class="a1"><path d="M22 24 L11 36" stroke="#12122b" stroke-width="5" stroke-linecap="round" fill="none"/></g>
 <circle cx="22" cy="10" r="9" fill="#ffd9b0" stroke="#12122b" stroke-width="2.5"/>
 <circle cx="25.5" cy="9" r="1.5" fill="#12122b"/></svg>`;
-const PAGE_V = 'v6';
+const PAGE_V = 'v7';
 let pw = sessionStorage.getItem('pw') || '', last = null, lastQn = -1, raceEndAt = 0, awardOpen = false;
 const laneEls = {}, LANE = {};
 function clearLanes() { for (const id of Object.keys(laneEls)) { laneEls[id].remove(); delete laneEls[id]; delete LANE[id]; } }
