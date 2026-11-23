@@ -1,9 +1,11 @@
-const express = require('express'), http = require('http'), crypto = require('crypto'), { Server } = require('socket.io');
+const express = require('express'), http = require('http'), crypto = require('crypto'), path = require('path'), { Server } = require('socket.io');
 const { CHO } = require('./questions');
-const { IMGS } = require('./imagequiz');
+const { IMGS } = require('./image-game/quiz');   // 이미지 게임 문제 목록 (image-game 폴더)
 const app = express(), srv = http.createServer(app);
 const io = new Server(srv, { pingInterval: 10000, pingTimeout: 25000 });
 app.use(express.static('public'));
+// image-game 폴더의 "이미지 파일만" 공개해요. 문제 목록(quiz.js, 정답이 들어 있어요)은 내려받을 수 없어요.
+app.use('/image-game', (req, res, next) => /\.(jpe?g|png|gif|webp|avif|svg)$/i.test(req.path) ? next() : res.sendStatus(404), express.static(path.join(__dirname, 'image-game')));
 
 // ── 설정: 필요하면 숫자만 바꾸세요 (모든 게임은 개인전이에요) ──
 const QSEC = 15;                     // 초성 문제당 제한시간(초)
@@ -15,8 +17,8 @@ const QUIZ_SPEED_STEP = 1;           // 초성: 한 명 늦을 때마다 줄어�
 const IMG_ON_PHONE = true;           // 이미지 퀴즈: true면 참가자 폰에도 이미지 표시, false면 관리자(큰) 화면에만
 const IMG_OFFLINE = false;           // true: 정답을 현장에서 말로 맞히고 관리자가 점수를 직접 줘요 / false: 폰에서 입력
 const IMG_POINTS = 80;               // 이미지 퀴즈: 가장 먼저 맞힌 1명이 받는 점수 (초성 1등 점수 50+30과 같게)
-const IMG_DIR = '/images/';
-const VERSION = 'v6';                // 화면 구석에 표시돼요 (올린 파일이 제대로 적용됐는지 확인용)
+const IMG_DIR = '/image-game/';
+const VERSION = 'v7';                // 화면 구석에 표시돼요 (올린 파일이 제대로 적용됐는지 확인용)
 const RACE_SEC = 15;                 // 달리기는 15초 고정
 const RACE_HIDE = 5;                 // 달리기 시작 후 이 시간(초) 동안은 관리자 화면에 아무것도 보여주지 않아요
 const TAP_POINT = 1;                 // 달리기: 터치 1번당 점수 (터치 횟수에 비례, 등수 보너스는 없어요)
@@ -34,7 +36,7 @@ const IMG_PH = ['img', 'imgWon', 'imgReveal'];
 const phaseView = () => ({
   v: VERSION, phase: S.phase, qn: IMG_PH.includes(S.phase) ? S.ik : S.qn, sec: QSEC,
   q: ['quiz', 'quizWait'].includes(S.phase) ? { hint: S.q.hint, q: S.q.q }
-    : ['img', 'imgWon'].includes(S.phase) ? { hint: S.iq.hint, img: IMG_ON_PHONE ? IMG_DIR + S.iq.img : null, offline: IMG_OFFLINE } : null,
+    : ['img', 'imgWon'].includes(S.phase) ? { img: IMG_ON_PHONE ? IMG_DIR + S.iq.img : null, offline: IMG_OFFLINE } : null,
   left: S.phase === 'quiz' ? Math.max(QSEC * 1000 - (Date.now() - S.qStart), 0) : 0,
 });
 
@@ -48,7 +50,7 @@ function push(force) {
     v: VERSION, phase: S.phase, qn: isImg ? S.ik : S.qn, qTotal: isImg ? IMGS.length : QS.length, lastQ: isImg ? S.ii >= IMGS.length : S.qi >= QS.length,
     sec: QSEC, raceSec: RACE_SEC, raceHide: RACE_HIDE,
     q: hasQ ? { hint: S.q.hint, q: S.q.q, answer: S.phase === 'quizReveal' ? shown(S.q.a) : null }
-      : isImg ? { hint: S.iq.hint, img: IMG_DIR + S.iq.img, answer: S.phase === 'imgReveal' ? shown(S.iq.a) : null } : null,
+      : isImg ? { img: IMG_DIR + S.iq.img, answer: S.phase === 'imgReveal' ? shown(S.iq.a) : null } : null,
     left: inQ ? Math.max(QSEC * 1000 - (now - S.qStart), 0) : 0,
     raceLeft: S.phase === 'race' ? Math.max(RACE_SEC * 1000 - elapsed, 0) : 0,
     raceElapsed: elapsed,
@@ -112,7 +114,7 @@ function startImg() {
 }
 function askImg() {
   const c = IMGS[S.ii++];
-  S.iq = { img: c.img, hint: c.hint || '', a: c.a }; S.ik++; S.correct = {}; S.winner = null; S.awards = []; S.qStart = Date.now(); S.phase = 'img';
+  S.iq = { img: c.img, a: c.a }; S.ik++; S.correct = {}; S.winner = null; S.awards = []; S.qStart = Date.now(); S.phase = 'img';
   S.gen++; clearTimeout(S.timer);
   io.emit('phase', phaseView()); push(true);
   const nx = IMGS[S.ii];   // 다음 이미지를 폰이 미리 받아 두면 공개할 때 바로 보여요
