@@ -1,11 +1,16 @@
 const express = require('express'), http = require('http'), crypto = require('crypto'), path = require('path'), { Server } = require('socket.io');
 const { CHO } = require('./questions');
-const { IMGS } = require('./image-game/quiz');   // 이미지 게임 문제 목록 (image-game 폴더)
+const fs = require('fs');
+// 이미지 게임 폴더: image-game/quiz.js 가 있으면 그 폴더를, 폴더가 한 겹 더 들어가 있으면(image-game/image-game) 안쪽 폴더를 써요
+const IMG_ROOT = [path.join(__dirname, 'image-game'), path.join(__dirname, 'image-game', 'image-game')]
+  .find(d => fs.existsSync(path.join(d, 'quiz.js'))) || path.join(__dirname, 'image-game');
+const { IMGS } = require(path.join(IMG_ROOT, 'quiz.js'));   // 이미지 게임 문제 목록
+console.log('이미지 게임 폴더:', IMG_ROOT);
 const app = express(), srv = http.createServer(app);
 const io = new Server(srv, { pingInterval: 10000, pingTimeout: 25000 });
 app.use(express.static('public'));
 // image-game 폴더의 "이미지 파일만" 공개해요. 문제 목록(quiz.js, 정답이 들어 있어요)은 내려받을 수 없어요.
-app.use('/image-game', (req, res, next) => /\.(jpe?g|png|gif|webp|avif|svg)$/i.test(req.path) ? next() : res.sendStatus(404), express.static(path.join(__dirname, 'image-game')));
+app.use('/image-game', (req, res, next) => /\.(jpe?g|png|gif|webp|avif|svg)$/i.test(req.path) ? next() : res.sendStatus(404), express.static(IMG_ROOT));
 
 // ── 설정: 필요하면 숫자만 바꾸세요 (모든 게임은 개인전이에요) ──
 const QSEC = 15;                     // 초성 문제당 제한시간(초)
