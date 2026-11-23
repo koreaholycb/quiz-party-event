@@ -1,54 +1,62 @@
 const express = require('express'), http = require('http'), crypto = require('crypto'), { Server } = require('socket.io');
 const { CHO } = require('./questions');
+const { IMGS } = require('./imagequiz');
 const app = express(), srv = http.createServer(app);
 const io = new Server(srv, { pingInterval: 10000, pingTimeout: 25000 });
 app.use(express.static('public'));
 
-// ── 설정: 필요하면 숫자만 바꾸세요 ──
-const QSEC = 7;                      // 초성 문제당 제한시간(초)
+// ── 설정: 필요하면 숫자만 바꾸세요 (모든 게임은 개인전이에요) ──
+const QSEC = 15;                     // 초성 문제당 제한시간(초)
 const QUIZ_MAX = 0;                  // 0이면 questions.js 전체 출제, 숫자면 위에서부터 그 개수만 (리허설할 때 5 등으로)
-const GOAL_PER_SEC = 6;              // 달리기: 결승선에 닿는 터치 속도(1인당 초당 횟수). 낮추면 더 쉽게 골인
-const TEAM_AVG = false;              // false: 팀원 터치 수 "합산" / true: 팀원 "평균" (인원이 다른 팀끼리 공정하게)
-const TAP_POINT = 1;                 // 달리기: 터치 1번당 개인 점수
-const TEAM_BONUS = [100, 70, 50];    // 달리기: 팀 순위 보너스 (1·2·3등 팀의 참가자 모두에게)
-const TEAM_BONUS_REST = 30;          // 달리기: 4등 이하 팀의 보너스
+const QUIZ_FIRST_ONLY = false;       // 초성 퀴즈도 "최초 정답자 1명만 점수"로 하려면 true
+const QUIZ_BASE = 50;                // 초성: 정답을 맞히면 받는 기본 점수
+const QUIZ_SPEED_MAX = 30;           // 초성: 가장 빨리 맞힌 1등이 받는 추가 점수
+const QUIZ_SPEED_STEP = 1;           // 초성: 한 명 늦을 때마다 줄어드는 추가 점수 (0점까지)
+const IMG_ON_PHONE = true;           // 이미지 퀴즈: true면 참가자 폰에도 이미지 표시, false면 관리자(큰) 화면에만
+const IMG_OFFLINE = false;           // true: 정답을 현장에서 말로 맞히고 관리자가 점수를 직접 줘요 / false: 폰에서 입력
+const IMG_POINTS = 80;               // 이미지 퀴즈: 가장 먼저 맞힌 1명이 받는 점수 (초성 1등 점수 50+30과 같게)
+const IMG_DIR = '/images/';
+const RACE_SEC = 20;                 // 달리기는 20초 고정
+const RACE_HIDE = 5;                 // 달리기 시작 후 이 시간(초) 동안은 관리자 화면에 아무것도 보여주지 않아요
+const GOAL_PER_SEC = 7;              // 달리기: 결승선에 닿는 터치 속도(초당 횟수). 낮추면 더 쉽게 골인
+const TAP_POINT = 1;                 // 달리기: 터치 1번당 점수 (터치 횟수에 비례, 등수 보너스는 없어요)
 
 const QS = QUIZ_MAX ? CHO.slice(0, QUIZ_MAX) : CHO;
-const S = { phase: 'idle', teams: ['1팀', '2팀', '3팀', '4팀', '5팀'], players: {}, qi: 0, qn: 0, q: null,
-  qStart: 0, correct: {}, raceSec: 10, raceStart: 0, raceRes: [], timer: null, gen: 0 };
+const S = { phase: 'idle', players: {}, qi: 0, qn: 0, q: null, qStart: 0, correct: {}, winner: null, awards: [],
+  ii: 0, ik: 0, iq: null, raceStart: 0, raceRes: [], timer: null, gen: 0 };
 const norm = s => String(s).replace(/\s/g, '').toLowerCase();
 const shown = a => a.filter(x => !x.startsWith('~')).join(' / ');
 const list = () => Object.values(S.players);
 const ranked = () => list().sort((a, b) => b.score - a.score);
-const free = () => ['idle', 'quizRank', 'raceRank'].includes(S.phase);
-const teamStats = () => S.teams.map(t => {
-  const m = list().filter(p => p.team === t), n = m.length, sum = m.reduce((a, p) => a + p.taps, 0);
-  return { team: t, n, taps: n ? Math.round((TEAM_AVG ? sum / n : sum) * 10) / 10 : 0 };
-});
-const goal = () => {
-  const per = S.raceSec * GOAL_PER_SEC;
-  return TEAM_AVG ? per : per * Math.max(...S.teams.map(t => list().filter(p => p.team === t).length), 1);
-};
+const free = () => ['idle', 'quizRank', 'raceRank', 'imgRank'].includes(S.phase);
+const top5 = () => list().filter(p => p.taps > 0).sort((a, b) => b.taps - a.taps).slice(0, 5);
+const IMG_PH = ['img', 'imgWon', 'imgReveal'];
 const phaseView = () => ({
-  phase: S.phase, teams: S.teams, qn: S.qn, sec: QSEC,
-  q: ['quiz', 'quizWait'].includes(S.phase) ? { hint: S.q.hint, q: S.q.q } : null,
+  phase: S.phase, qn: IMG_PH.includes(S.phase) ? S.ik : S.qn, sec: QSEC,
+  q: ['quiz', 'quizWait'].includes(S.phase) ? { hint: S.q.hint, q: S.q.q }
+    : ['img', 'imgWon'].includes(S.phase) ? { hint: S.iq.hint, img: IMG_ON_PHONE ? IMG_DIR + S.iq.img : null, offline: IMG_OFFLINE } : null,
   left: S.phase === 'quiz' ? Math.max(QSEC * 1000 - (Date.now() - S.qStart), 0) : 0,
 });
 
 let pushedAt = 0;
 function push(force) {
   const now = Date.now(); if (!force && now - pushedAt < 400) return; pushedAt = now;
-  const o = ranked(), inQ = S.phase === 'quiz', hasQ = ['quiz', 'quizWait', 'quizReveal'].includes(S.phase);
+  const o = ranked(), inQ = S.phase === 'quiz', hasQ = ['quiz', 'quizWait', 'quizReveal'].includes(S.phase), isImg = IMG_PH.includes(S.phase);
+  const elapsed = S.phase === 'race' ? now - S.raceStart : 0;
+  const showTop = S.phase === 'raceEnd' || (S.phase === 'race' && elapsed >= RACE_HIDE * 1000);   // 처음 5초는 서버에서도 보내지 않아요
   io.to('admin').emit('admin', {
-    phase: S.phase, qn: S.qn, qTotal: QS.length, lastQ: S.qi >= QS.length, sec: QSEC, raceSec: S.raceSec, goal: goal(),
-    q: hasQ ? { hint: S.q.hint, q: S.q.q, answer: S.phase === 'quizReveal' ? shown(S.q.a) : null } : null,
+    phase: S.phase, qn: isImg ? S.ik : S.qn, qTotal: isImg ? IMGS.length : QS.length, lastQ: isImg ? S.ii >= IMGS.length : S.qi >= QS.length,
+    sec: QSEC, raceSec: RACE_SEC, raceHide: RACE_HIDE, goal: RACE_SEC * GOAL_PER_SEC,
+    q: hasQ ? { hint: S.q.hint, q: S.q.q, answer: S.phase === 'quizReveal' ? shown(S.q.a) : null }
+      : isImg ? { hint: S.iq.hint, img: IMG_DIR + S.iq.img, answer: S.phase === 'imgReveal' ? shown(S.iq.a) : null } : null,
     left: inQ ? Math.max(QSEC * 1000 - (now - S.qStart), 0) : 0,
-    raceLeft: S.phase === 'race' ? Math.max(S.raceSec * 1000 - (now - S.raceStart), 0) : 0,
-    correctN: Object.keys(S.correct).length,
+    raceLeft: S.phase === 'race' ? Math.max(RACE_SEC * 1000 - elapsed, 0) : 0,
+    raceElapsed: elapsed,
+    correctN: Object.keys(S.correct).length, winner: S.winner, firstOnly: isImg ? true : QUIZ_FIRST_ONLY,
+    offline: IMG_OFFLINE, awards: isImg ? S.awards : [],
     online: o.filter(p => p.sid).length, total: o.length,
-    teams: teamStats(),
-    board: o.slice(0, 200).map(p => ({ id: p.id, name: p.name, team: p.team, score: p.score, gain: p.score - p.mark, on: !!p.sid })),
-    raceTop: list().filter(p => p.taps > 0).sort((a, b) => b.taps - a.taps).slice(0, 8).map(p => ({ name: p.name, team: p.team, taps: p.taps })),
+    board: o.slice(0, 200).map(p => ({ id: p.id, name: p.name, score: p.score, gain: p.score - p.mark, on: !!p.sid })),
+    raceTop: showTop ? top5().map(p => ({ id: p.id, name: p.name, taps: p.taps })) : [],
     raceRes: ['raceEnd', 'raceRank'].includes(S.phase) ? S.raceRes : [],
   });
 }
@@ -62,12 +70,12 @@ function startQuiz() {
 }
 function ask() {
   const c = QS[S.qi++];
-  S.q = { hint: c[0], q: c[1], a: c[2] }; S.qn++; S.correct = {}; S.qStart = Date.now(); S.phase = 'quiz';
+  S.q = { hint: c[0], q: c[1], a: c[2] }; S.qn++; S.correct = {}; S.winner = null; S.qStart = Date.now(); S.phase = 'quiz';
   const g = ++S.gen;
   io.emit('phase', phaseView()); push(true);
   clearTimeout(S.timer); S.timer = setTimeout(() => { if (g === S.gen) endQ(); }, QSEC * 1000);
 }
-function endQ() {   // 7초 종료: 정답은 아직 공개하지 않고, 관리자가 "정답 확인"을 누를 때까지 기다려요
+function endQ() {   // 제한시간 종료: 정답은 아직 공개하지 않고, 관리자가 "정답 확인"을 누를 때까지 기다려요
   S.phase = 'quizWait';
   io.emit('phase', phaseView()); push(true);
 }
@@ -86,14 +94,40 @@ function next() {   // 다음 문제. 마지막 문제였다면 순위 발표로
 function rank() {   // 게임이 끝났을 때 관리자 화면에 순위 발표
   if (S.phase === 'quizReveal') S.phase = 'quizRank';
   else if (S.phase === 'raceEnd') S.phase = 'raceRank';
+  else if (S.phase === 'imgReveal') S.phase = 'imgRank';
   else return;
   io.emit('phase', phaseView()); push(true);
 }
 
-// ── 달리기: 팀별 터치 수를 합산해 팀 캐릭터가 달려요 ──
-function startRace(sec) {
+// ── 이미지 퀴즈: 제한시간 없음. 가장 먼저 맞힌 1명이 나오면 모든 화면이 바뀌고, 관리자가 "정답 공개" → "다음 문제" ──
+function imgNext() {
+  if (free()) return startImg();
+  if (S.phase === 'img' || S.phase === 'imgWon') return revealImg();
+  if (S.phase === 'imgReveal') return S.ii >= IMGS.length ? rank() : askImg();
+}
+function startImg() {
+  if (!IMGS.length) return;
+  S.ii = 0; S.ik = 0; list().forEach(p => p.mark = p.score);
+  askImg();
+}
+function askImg() {
+  const c = IMGS[S.ii++];
+  S.iq = { img: c.img, hint: c.hint || '', a: c.a }; S.ik++; S.correct = {}; S.winner = null; S.awards = []; S.qStart = Date.now(); S.phase = 'img';
+  S.gen++; clearTimeout(S.timer);
+  io.emit('phase', phaseView()); push(true);
+  const nx = IMGS[S.ii];   // 다음 이미지를 폰이 미리 받아 두면 공개할 때 바로 보여요
+  if (nx && IMG_ON_PHONE) io.emit('preload', IMG_DIR + nx.img);
+}
+function revealImg() {
+  S.phase = 'imgReveal';
+  const answer = shown(S.iq.a);
+  list().forEach(p => p.sid && io.to(p.sid).emit('reveal', { answer, ok: null }));   // 정답자 본인에게도 알리지 않아요 (큰 화면에서만 공개)
+  push(true);
+}
+
+// ── 달리기: 20초 고정, 개인전. 관리자 화면에는 6초부터 1~5등만 보여요 ──
+function startRace() {
   if (!free()) return;
-  S.raceSec = [10, 15, 20, 30].includes(sec) ? sec : 10;
   list().forEach(p => { p.taps = 0; p.last = 0; p.mark = p.score; });
   S.raceRes = [];
   const g = ++S.gen;
@@ -103,16 +137,15 @@ function startRace(sec) {
   S.timer = setTimeout(() => {
     if (g !== S.gen) return;
     S.phase = 'race'; S.raceStart = Date.now(); io.emit('phase', phaseView()); push(true);
-    S.timer = setTimeout(() => { if (g === S.gen) endRace(); }, S.raceSec * 1000);
+    S.timer = setTimeout(() => { if (g === S.gen) endRace(); }, RACE_SEC * 1000);
   }, 3000);
 }
 function endRace() {
   S.phase = 'raceEnd';
-  const ts = teamStats().filter(t => t.n && t.taps > 0).sort((a, b) => b.taps - a.taps), bonus = {};
-  ts.forEach((t, i) => bonus[t.team] = i < TEAM_BONUS.length ? TEAM_BONUS[i] : TEAM_BONUS_REST);
-  // 개인 점수 = 내 터치 수 × TAP_POINT + 우리 팀 순위 보너스 (터치를 1번 이상 한 사람만)
-  list().forEach(p => { if (p.taps > 0) p.score += Math.round(p.taps * TAP_POINT) + (bonus[p.team] || 0); });
-  S.raceRes = ts.map(t => ({ team: t.team, taps: t.taps, bonus: bonus[t.team] }));
+  const order = list().filter(p => p.taps > 0).sort((a, b) => b.taps - a.taps);
+  // 개인 점수 = 내 터치 수 × TAP_POINT (터치 횟수에 비례)
+  order.forEach(p => { p.score += Math.round(p.taps * TAP_POINT); });
+  S.raceRes = order.slice(0, 5).map(p => ({ name: p.name, taps: p.taps, pts: Math.round(p.taps * TAP_POINT) }));
   list().forEach(p => p.sid && io.to(p.sid).emit('raceEnd', {}));
   push(true);
 }
@@ -130,21 +163,27 @@ io.on('connection', s => {
     if (!p) {
       const name = String(d.name || '').trim().slice(0, 8);
       if (!name) return cb({ err: '이름을 입력해 주세요.' });
-      if (!S.teams.includes(d.team)) return cb({ err: '팀을 골라 주세요.' });
-      p = S.players[id] = { id, name, team: d.team, score: 0, mark: 0, taps: 0, last: 0 };
+      p = S.players[id] = { id, name, score: 0, mark: 0, taps: 0, last: 0 };
     }
     p.sid = s.id; me = p;
-    cb({ ok: 1, name: p.name, team: p.team });
+    cb({ ok: 1, name: p.name });
     s.emit('phase', phaseView());
     push();
   });
   s.on('answer', (t, cb) => {
     if (!me || typeof cb !== 'function' || S.correct[me.id]) return;
-    const el = Date.now() - S.qStart;
-    if (S.phase !== 'quiz' || el > QSEC * 1000 + 300) return cb('late');
-    if (!S.q.a.some(a => norm(a.replace(/^~/, '')) === norm(t))) return cb(false);
-    const g = 50 + Math.round(50 * Math.max(QSEC * 1000 - el, 0) / (QSEC * 1000));
-    me.score += g; S.correct[me.id] = g; cb(true); push();   // 점수는 관리자 화면에만 보여요
+    const inImg = S.phase === 'img', el = Date.now() - S.qStart;
+    if (S.phase === 'imgWon') return cb('taken');                  // 이미 정답자가 나온 이미지 문제
+    if (inImg && IMG_OFFLINE) return cb('late');                   // 현장 정답 방식에서는 폰 입력을 받지 않아요
+    if (!inImg && (S.phase !== 'quiz' || el > QSEC * 1000 + 300)) return cb('late');
+    const cur = inImg ? S.iq : S.q;
+    if (!cur.a.some(a => norm(a.replace(/^~/, '')) === norm(t))) return cb(false);
+    if (!inImg && QUIZ_FIRST_ONLY && S.winner) return cb(false);   // 초성 퀴즈 최초 정답자 방식(선택)
+    const g = inImg ? IMG_POINTS : QUIZ_BASE + Math.max(QUIZ_SPEED_MAX - Object.keys(S.correct).length * QUIZ_SPEED_STEP, 0);   // 기본 점수 + 빨리 맞힌 순서 추가 점수
+    if (!S.winner) S.winner = me.name;
+    me.score += g; S.correct[me.id] = g; cb(true);                 // 점수는 관리자 화면에만 보여요
+    if (inImg) { S.phase = 'imgWon'; io.emit('phase', phaseView()); push(true); }   // 모든 화면에 "정답자가 나왔어요"
+    else push();
   });
   s.on('tap', n => {
     if (!me || S.phase !== 'race') return;
@@ -169,14 +208,18 @@ io.on('connection', s => {
   A('reveal', revealQ);
   A('next', next);
   A('rank', rank);
-  A('race', sec => startRace(Number(sec)));
+  A('imgNext', imgNext);
+  A('race', () => startRace());
   A('stop', stop);
-  A('teams', str => {
-    const t = [...new Set(String(str).split(/[,\n]/).map(x => x.trim().slice(0, 8)).filter(Boolean))].slice(0, 12);
-    if (!t.length) return;
-    S.teams = t;
-    list().forEach(p => { if (!t.includes(p.team)) { p.team = t[0]; p.sid && io.to(p.sid).emit('profile', { team: p.team }); } });
-    io.emit('phase', phaseView()); push(true);
+  A('award', (id, pts) => {   // 관리자가 직접 점수 주기 (이미지 게임 중에만)
+    const p = S.players[id]; pts = Math.round(Number(pts));
+    if (!p || !Number.isFinite(pts) || !pts || Math.abs(pts) > 1000 || !IMG_PH.includes(S.phase)) return;
+    p.score += pts; S.awards.push({ id, name: p.name, pts }); push(true);
+  });
+  A('unaward', i => {   // 잘못 준 점수 취소
+    const a = S.awards[i]; if (!a) return;
+    const p = S.players[a.id]; if (p) p.score -= a.pts;
+    S.awards.splice(i, 1); push(true);
   });
   A('resetScores', () => { list().forEach(p => { p.score = 0; p.mark = 0; p.taps = 0; }); S.qn = 0; S.qi = 0; push(true); });
   A('kick', id => { const p = S.players[id]; if (p) { p.sid && io.to(p.sid).emit('kicked'); delete S.players[id]; push(true); } });
