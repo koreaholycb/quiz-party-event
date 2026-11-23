@@ -16,9 +16,9 @@ const IMG_ON_PHONE = true;           // 이미지 퀴즈: true면 참가자 폰�
 const IMG_OFFLINE = false;           // true: 정답을 현장에서 말로 맞히고 관리자가 점수를 직접 줘요 / false: 폰에서 입력
 const IMG_POINTS = 80;               // 이미지 퀴즈: 가장 먼저 맞힌 1명이 받는 점수 (초성 1등 점수 50+30과 같게)
 const IMG_DIR = '/images/';
-const RACE_SEC = 20;                 // 달리기는 20초 고정
+const VERSION = 'v6';                // 화면 구석에 표시돼요 (올린 파일이 제대로 적용됐는지 확인용)
+const RACE_SEC = 15;                 // 달리기는 15초 고정
 const RACE_HIDE = 5;                 // 달리기 시작 후 이 시간(초) 동안은 관리자 화면에 아무것도 보여주지 않아요
-const GOAL_PER_SEC = 7;              // 달리기: 결승선에 닿는 터치 속도(초당 횟수). 낮추면 더 쉽게 골인
 const TAP_POINT = 1;                 // 달리기: 터치 1번당 점수 (터치 횟수에 비례, 등수 보너스는 없어요)
 
 const QS = QUIZ_MAX ? CHO.slice(0, QUIZ_MAX) : CHO;
@@ -32,7 +32,7 @@ const free = () => ['idle', 'quizRank', 'raceRank', 'imgRank'].includes(S.phase)
 const top5 = () => list().filter(p => p.taps > 0).sort((a, b) => b.taps - a.taps).slice(0, 5);
 const IMG_PH = ['img', 'imgWon', 'imgReveal'];
 const phaseView = () => ({
-  phase: S.phase, qn: IMG_PH.includes(S.phase) ? S.ik : S.qn, sec: QSEC,
+  v: VERSION, phase: S.phase, qn: IMG_PH.includes(S.phase) ? S.ik : S.qn, sec: QSEC,
   q: ['quiz', 'quizWait'].includes(S.phase) ? { hint: S.q.hint, q: S.q.q }
     : ['img', 'imgWon'].includes(S.phase) ? { hint: S.iq.hint, img: IMG_ON_PHONE ? IMG_DIR + S.iq.img : null, offline: IMG_OFFLINE } : null,
   left: S.phase === 'quiz' ? Math.max(QSEC * 1000 - (Date.now() - S.qStart), 0) : 0,
@@ -45,8 +45,8 @@ function push(force) {
   const elapsed = S.phase === 'race' ? now - S.raceStart : 0;
   const showTop = S.phase === 'raceEnd' || (S.phase === 'race' && elapsed >= RACE_HIDE * 1000);   // 처음 5초는 서버에서도 보내지 않아요
   io.to('admin').emit('admin', {
-    phase: S.phase, qn: isImg ? S.ik : S.qn, qTotal: isImg ? IMGS.length : QS.length, lastQ: isImg ? S.ii >= IMGS.length : S.qi >= QS.length,
-    sec: QSEC, raceSec: RACE_SEC, raceHide: RACE_HIDE, goal: RACE_SEC * GOAL_PER_SEC,
+    v: VERSION, phase: S.phase, qn: isImg ? S.ik : S.qn, qTotal: isImg ? IMGS.length : QS.length, lastQ: isImg ? S.ii >= IMGS.length : S.qi >= QS.length,
+    sec: QSEC, raceSec: RACE_SEC, raceHide: RACE_HIDE,
     q: hasQ ? { hint: S.q.hint, q: S.q.q, answer: S.phase === 'quizReveal' ? shown(S.q.a) : null }
       : isImg ? { hint: S.iq.hint, img: IMG_DIR + S.iq.img, answer: S.phase === 'imgReveal' ? shown(S.iq.a) : null } : null,
     left: inQ ? Math.max(QSEC * 1000 - (now - S.qStart), 0) : 0,
@@ -125,7 +125,7 @@ function revealImg() {
   push(true);
 }
 
-// ── 달리기: 20초 고정, 개인전. 관리자 화면에는 6초부터 1~5등만 보여요 ──
+// ── 달리기: 15초 고정, 개인전. 관리자 화면에는 처음 5초는 아무것도 없고, 그 뒤부터 1~5등만 보여요 ──
 function startRace() {
   if (!free()) return;
   list().forEach(p => { p.taps = 0; p.last = 0; p.mark = p.score; });
