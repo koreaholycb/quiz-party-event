@@ -23,7 +23,7 @@ button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
 .err{color:#c4004f;min-height:1.2em;margin:0}
 .track{height:14px;background:#fff;border:3px solid var(--ink);border-radius:9px;overflow:hidden;margin:10px 0 16px}
 #bar{height:100%;width:100%;background:var(--p)}
-#hint{margin:0;opacity:.7;text-align:center}
+#hint{display:table;margin:0 auto 6px;font-size:32px;background:var(--y);color:var(--ink);border:3px solid var(--ink);border-radius:99px;padding:4px 22px;text-align:center}
 .q{font-size:46px;text-align:center;margin:18px 0 6px;letter-spacing:.06em;word-break:keep-all}
 #msg{min-height:1.5em;text-align:center;font-size:20px;margin:6px 0 10px}
 .big{font-size:34px;margin:0 0 8px}
@@ -40,10 +40,9 @@ button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
 
 <section id="join">
   <h1>송년회<br>게임</h1>
-  <p class="sub">이름을 쓰고 우리 팀을 골라요</p>
+  <p class="sub">이름을 쓰고 입장해요</p>
   <div class="card">
     <input id="nm" maxlength="8" placeholder="이름 (8자까지)" autocomplete="off">
-    <div class="teams" id="tm"></div>
     <button id="go">입장</button>
     <p class="err" id="err"></p>
   </div>
@@ -63,6 +62,19 @@ button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
   <form id="qf"><input id="ans" autocomplete="off" placeholder="정답 입력"><button type="submit">제출</button></form>
 </section>
 
+<section id="imgq" hidden>
+  <p class="big" id="itop"></p>
+  <div class="card" id="icard" style="padding:10px"><img id="iimg" alt="맞혀 보세요" style="width:100%;border-radius:12px;display:block"></div>
+  <p id="inote" class="sub" hidden>큰 화면을 보고 맞혀 보세요!</p>
+  <div id="imsg" style="min-height:1.5em;text-align:center;font-size:20px;margin:6px 0 10px"></div>
+  <form id="iqf"><input id="ians" autocomplete="off" placeholder="정답 입력"><button type="submit">제출</button></form>
+</section>
+
+<section id="won" hidden>
+  <p class="big" style="text-align:center">🎉 정답자가 나왔어요!</p>
+  <div class="card"><p style="margin:0;font-size:22px;line-height:1.6">관리자가 정답을 공개할 때까지 기다려요.</p></div>
+</section>
+
 <section id="res" hidden>
   <p class="big" id="rt"></p>
   <div class="card"><p id="rb" style="margin:0;font-size:22px;line-height:1.6"></p></div>
@@ -80,25 +92,21 @@ button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
 const $ = id => document.getElementById(id), s = io(), L = localStorage;
 const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let id = L.qp_id || (L.qp_id = Math.random().toString(36).slice(2) + Date.now().toString(36));
-let teams = [], team = L.qp_team || '', joined = false, phase = 'idle', curQ = -1, done = false, cnt = 0, pend = 0, goal = 80;
-const show = x => ['join', 'wait', 'quiz', 'res', 'race'].forEach(k => $(k).hidden = k !== x);
+let joined = false, phase = 'idle', curQ = -1, done = false, cnt = 0, pend = 0, goal = 80;
+const show = x => ['join', 'wait', 'quiz', 'res', 'race', 'imgq', 'won'].forEach(k => $(k).hidden = k !== x);
 $('nm').value = L.qp_name || '';
 
-function renderTeams() {
-  $('tm').innerHTML = teams.map(t => `<button type="button" class="${t === team ? 'on' : ''}" data-t="${esc(t)}">${esc(t)}</button>`).join('');
-}
-$('tm').onclick = e => { const t = e.target.dataset.t; if (t) { team = t; renderTeams(); } };
 function join() {
   const name = $('nm').value.trim();
-  if (!name || !team) { $('err').textContent = '이름을 쓰고 팀을 골라 주세요.'; return; }
-  s.emit('hello', { id, name, team }, r => {
+  if (!name) { $('err').textContent = '이름을 써 주세요.'; return; }
+  s.emit('hello', { id, name }, r => {
     if (r.err) { joined = false; $('err').textContent = r.err; return; }
-    joined = true; L.qp_name = r.name; L.qp_team = r.team; team = r.team;
-    $('who').textContent = `${r.name} · ${r.team}`;
+    joined = true; L.qp_name = r.name;
+    $('who').textContent = r.name;
   });
 }
 $('go').onclick = join;
-s.on('connect', () => { if (L.qp_name && L.qp_team) { $('nm').value = L.qp_name; team = L.qp_team; join(); } });
+s.on('connect', () => { if (L.qp_name) { $('nm').value = L.qp_name; join(); } });
 
 function startQ(d) {
   show('quiz');
@@ -110,7 +118,7 @@ function startQ(d) {
   if (!done) $('ans').focus();
 }
 s.on('phase', d => {
-  teams = d.teams; phase = d.phase; renderTeams();
+  phase = d.phase;
   if (!joined) return show('join');
   if (d.phase === 'quiz') startQ(d);
   else if (d.phase === 'raceCount') { show('race'); $('rc').textContent = '준비!'; $('tap').disabled = true; $('tap').textContent = '…'; }
@@ -120,12 +128,38 @@ s.on('phase', d => {
     $('bar').style.transition = 'none'; $('bar').style.width = '0'; $('ans').disabled = true;
     $('msg').textContent = done ? '정답을 맞혔어요! 정답 발표를 기다려요…' : '시간 끝! 정답 발표를 기다려요…';
   }
-  else if (['idle', 'quizRank', 'raceRank'].includes(d.phase)) { show('wait'); $('wm').textContent = d.phase === 'idle' ? '관리자가 시작하면 문제가 나와요.' : '게임 끝! 순위는 큰 화면에서 확인해요 🏆'; }
+  else if (d.phase === 'img') startImg(d);
+  else if (d.phase === 'imgWon') show('won');   // 정답자 본인에게도 알리지 않고 모두 같은 화면을 봐요
+  else if (['idle', 'quizRank', 'raceRank', 'imgRank'].includes(d.phase)) { show('wait'); $('wm').textContent = d.phase === 'idle' ? '관리자가 시작하면 문제가 나와요.' : '게임 끝! 순위는 큰 화면에서 확인해요 🏆'; }
   else if ($('res').hidden) show('wait');
 });
-s.on('profile', d => { team = d.team; L.qp_team = d.team; });
-s.on('kicked', () => { L.qp_id = id = Math.random().toString(36).slice(2) + Date.now().toString(36); delete L.qp_name; delete L.qp_team; joined = false; team = ''; renderTeams(); $('nm').value = ''; $('err').textContent = '관리자가 참가 정보를 지웠어요. 다시 입장해 주세요.'; show('join'); });
+s.on('kicked', () => { L.qp_id = id = Math.random().toString(36).slice(2) + Date.now().toString(36); delete L.qp_name; joined = false; $('nm').value = ''; $('err').textContent = '관리자가 참가 정보를 지웠어요. 다시 입장해 주세요.'; show('join'); });
 
+let imgN = -1, idone = false;
+function startImg(d) {
+  show('imgq');
+  if (imgN !== d.qn) {
+    imgN = d.qn; idone = false; $('ians').value = ''; $('ians').disabled = false; $('imsg').textContent = '';
+    if (d.q.img) $('iimg').src = d.q.img;
+  }
+  $('itop').textContent = `${d.qn}번째 문제${d.q.hint ? ' · ' + d.q.hint : ''}`;
+  $('icard').hidden = !d.q.img; $('iqf').hidden = !!d.q.offline;
+  $('inote').textContent = d.q.offline ? '정답은 말로 외쳐 주세요! 🙋' : '큰 화면을 보고 맞혀 보세요!';
+  $('inote').hidden = !!d.q.img && !d.q.offline;
+}
+$('iimg').onerror = () => { $('imsg').textContent = '이미지를 불러오지 못했어요. 새로고침해 주세요.'; };
+s.on('preload', u => { new Image().src = u; });
+$('iqf').onsubmit = e => {
+  e.preventDefault();
+  const v = $('ians').value.trim();
+  if (!v || idone) return;
+  s.emit('answer', v, r => {
+    if (r === true) { idone = true; show('won'); }   // 정답자도 다른 사람과 똑같은 화면만 봐요
+    else if (r === 'taken') show('won');
+    else if (r === 'late') $('imsg').textContent = '지금은 제출할 수 없어요';
+    else { $('ians').value = ''; $('imsg').textContent = '오답 ✗ 다시 도전!'; $('ians').classList.add('shake'); setTimeout(() => $('ians').classList.remove('shake'), 300); }
+  });
+};
 $('qf').onsubmit = e => {
   e.preventDefault();
   const v = $('ans').value.trim();
@@ -138,7 +172,7 @@ $('qf').onsubmit = e => {
 };
 s.on('reveal', x => {
   show('res');
-  $('rt').textContent = x.ok ? '정답!' : '아쉬워요!';
+  $('rt').textContent = x.ok === null ? '정답 공개!' : x.ok ? '정답!' : '아쉬워요!';
   $('rb').innerHTML = `정답: <b>${esc(x.answer)}</b>`;
 });
 s.on('count', n => { $('rc').textContent = n; });
