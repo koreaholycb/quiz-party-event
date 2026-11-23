@@ -17,9 +17,6 @@ input{background:#fff;color:var(--ink);margin-bottom:10px}
 input:focus-visible,button:focus-visible{outline:3px solid var(--p);outline-offset:2px}
 button{background:var(--y);color:var(--ink);cursor:pointer;margin-bottom:10px;box-shadow:3px 3px 0 var(--ink)}
 button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
-.teams{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-.teams button{margin:0;box-shadow:none;background:#fff;font-size:17px}
-.teams button.on{background:var(--y)}
 .err{color:#c4004f;min-height:1.2em;margin:0}
 .track{height:14px;background:#fff;border:3px solid var(--ink);border-radius:9px;overflow:hidden;margin:10px 0 16px}
 #bar{height:100%;width:100%;background:var(--p)}
@@ -46,6 +43,7 @@ button:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--ink)}
     <button id="go">입장</button>
     <p class="err" id="err"></p>
   </div>
+  <p id="ver" style="font-size:13px;opacity:.6;margin:8px 0 0"></p>
 </section>
 
 <section id="wait" hidden>
@@ -118,7 +116,7 @@ function startQ(d) {
   if (!done) $('ans').focus();
 }
 s.on('phase', d => {
-  phase = d.phase;
+  phase = d.phase; $('ver').textContent = `화면 v6 · 서버 ${d.v || '?'}`;
   if (!joined) return show('join');
   if (d.phase === 'quiz') startQ(d);
   else if (d.phase === 'raceCount') { show('race'); $('rc').textContent = '준비!'; $('tap').disabled = true; $('tap').textContent = '…'; }

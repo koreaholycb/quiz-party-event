@@ -35,9 +35,9 @@ input:focus-visible,button:focus-visible{outline:3px solid var(--p);outline-offs
 #lanes{--rh:60px;display:flex;flex-direction:column;max-width:900px;margin:14px auto 0}
 .lane{display:flex;align-items:center;gap:10px;margin:6px 0;text-align:left}
 .lane b{width:170px;flex:none;line-height:1.1;font-size:22px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.lane .t{position:relative;flex:1;height:calc(var(--rh) + 10px);background:var(--soft);border-radius:14px;border:2px solid var(--ink);background-image:repeating-linear-gradient(90deg,transparent 0 48px,#dfe2ff 48px 50px)}
-.lane .t::after{content:'';position:absolute;right:0;top:0;bottom:0;width:14px;background:repeating-conic-gradient(var(--ink) 0 25%,#fff 0 50%) 0 0/14px 14px;border-radius:0 11px 11px 0}
-.lane .r{position:absolute;top:50%;left:0;margin-top:calc(var(--rh) / -2);transition:left .4s linear,transform .4s linear;z-index:1}
+.lane .t{position:relative;flex:1;height:calc(var(--rh) + 14px);overflow:hidden;background-color:#dfe6ff;border-radius:14px;border:2px solid var(--ink);
+  background-image:linear-gradient(90deg,transparent 0 68px,#b9c2ff 68px 76px),linear-gradient(transparent calc(100% - 10px),#8f9bff calc(100% - 10px));background-size:76px 100%,100% 100%}
+.lane .r{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);transition:left .5s linear;z-index:1}
 .runner svg{display:block;height:var(--rh);width:auto;overflow:visible}
 .runner .l1,.runner .l2{transform-origin:22px 40px}
 .runner .a1,.runner .a2{transform-origin:22px 24px}
@@ -66,7 +66,7 @@ li.off{opacity:.5}
 </section>
 
 <section id="dash" hidden>
-  <div class="top"><h1>송년회 관리자</h1><span class="chip" id="ph"></span><span id="cn"></span></div>
+  <div class="top"><h1>송년회 관리자</h1><span class="chip" id="ph"></span><span id="cn"></span><small id="ver" style="opacity:.6"></small></div>
 
   <div class="card row">
     <button id="st">초성 게임 시작 ▶</button>
@@ -76,7 +76,7 @@ li.off{opacity:.5}
     <button id="im">이미지 게임 시작 ▶</button>
     <button id="aw" class="g" hidden>점수 주기 ▾</button>
     <span>|</span>
-    <button id="rc">달리기 시작 🏃 (20초)</button>
+    <button id="rc">달리기 시작 🏃 (15초)</button>
     <button id="rk" class="g">순위 발표 🏆</button>
     <button id="sp" class="g">중단</button>
   </div>
@@ -145,8 +145,10 @@ const runner = c => `<svg viewBox="0 0 44 66" aria-hidden="true">
 <g class="a1"><path d="M22 24 L11 36" stroke="#12122b" stroke-width="5" stroke-linecap="round" fill="none"/></g>
 <circle cx="22" cy="10" r="9" fill="#ffd9b0" stroke="#12122b" stroke-width="2.5"/>
 <circle cx="25.5" cy="9" r="1.5" fill="#12122b"/></svg>`;
+const PAGE_V = 'v6';
 let pw = sessionStorage.getItem('pw') || '', last = null, lastQn = -1, raceEndAt = 0, awardOpen = false;
-const laneEls = {};
+const laneEls = {}, LANE = {};
+function clearLanes() { for (const id of Object.keys(laneEls)) { laneEls[id].remove(); delete laneEls[id]; delete LANE[id]; } }
 
 function login() {
   if (!pw) return;
@@ -160,29 +162,49 @@ $('ok').onclick = () => { pw = $('pw').value; sessionStorage.setItem('pw', pw); 
 $('pw').onkeydown = e => { if (e.key === 'Enter') $('ok').click(); };
 $('out').onclick = () => { sessionStorage.removeItem('pw'); location.reload(); };
 
-function drawLanes(d) {   // 달리기: 1~5등만, 한 사람당 캐릭터 1명. 순위가 바뀌면 줄 순서도 바뀌어요
-  const ids = d.raceTop.map(p => p.id);
-  for (const id of Object.keys(laneEls)) if (!ids.includes(id)) { laneEls[id].remove(); delete laneEls[id]; }
+// 달리기: 끝이 없는 트랙. 땅이 뒤로 흘러가서 계속 앞으로 달리는 것처럼 보여요.
+// 1등이 오른쪽에 서고, 터치가 적을수록 뒤(왼쪽)로 처져요. 땅이 흐르는 속도는 그 사람의 터치 속도예요.
+function drawLanes(d) {
+  const ids = d.raceTop.map(p => p.id), now = performance.now();
+  for (const id of Object.keys(laneEls)) if (!ids.includes(id)) { laneEls[id].remove(); delete laneEls[id]; delete LANE[id]; }
+  const lead = d.raceTop.length ? d.raceTop[0].taps : 0;
   d.raceTop.forEach((p, i) => {
     let el = laneEls[p.id];
     if (!el) {
       el = laneEls[p.id] = document.createElement('div'); el.className = 'lane';
       el.innerHTML = `<b></b><div class="t"><i class="r runner">${runner(colorOf(p.id))}</i></div>`;
       $('lanes').appendChild(el);
+      LANE[p.id] = { x: 0, speed: 0, target: 0, taps: p.taps, at: now };
+    }
+    const L = LANE[p.id];
+    if (now - L.at > 150) {
+      L.target = d.phase === 'race' ? Math.max((p.taps - L.taps) / ((now - L.at) / 1000), 0) : 0;
+      L.taps = p.taps; L.at = now;
     }
     el.style.order = i;
     el.querySelector('b').textContent = `${medal(i)} ${p.name}`;
-    const pct = Math.min(p.taps / d.goal * 100, 100), r = el.querySelector('.r');
-    r.style.left = pct + '%'; r.style.transform = `translateX(-${pct}%)`;
-    r.classList.toggle('run', d.phase === 'race');
+    el.querySelector('.r').style.left = Math.max(88 - Math.min(lead - p.taps, 78), 8) + '%';
   });
 }
+let lastFrame = performance.now();
+function frame(t) {
+  const dt = Math.min((t - lastFrame) / 1000, 0.1); lastFrame = t;
+  for (const id in LANE) {
+    const L = LANE[id], el = laneEls[id]; if (!el) continue;
+    L.speed += (L.target - L.speed) * Math.min(dt * 3, 1);
+    L.x = (L.x + L.speed * 45 * dt) % 76;
+    el.querySelector('.t').style.backgroundPosition = `${-L.x}px 0, 0 0`;
+    el.querySelector('.r').classList.toggle('run', L.speed > 0.4);
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
 
 s.on('admin', d => {
   last = d;
   const free = ['idle', 'quizRank', 'raceRank', 'imgRank'].includes(d.phase), isRank = ['quizRank', 'raceRank', 'imgRank'].includes(d.phase);
   const isImg = ['img', 'imgWon', 'imgReveal'].includes(d.phase);
-  $('ph').textContent = NAMES[d.phase] || d.phase;
+  $('ph').textContent = NAMES[d.phase] || d.phase; $('ver').textContent = `화면 ${PAGE_V} · 서버 ${d.v || '?'}`;
   $('cn').textContent = `접속 ${d.online}명 / 등록 ${d.total}명`;
   $('st').disabled = !free; $('rc').disabled = !free; $('sp').disabled = free;
   $('rv').disabled = d.phase !== 'quizWait';
@@ -215,14 +237,14 @@ s.on('admin', d => {
     requestAnimationFrame(() => requestAnimationFrame(() => { b.style.transition = `width ${d.left}ms linear`; b.style.width = '0'; }));
   }
 
-  if (d.phase === 'raceCount') { for (const id of Object.keys(laneEls)) { laneEls[id].remove(); delete laneEls[id]; } $('sBig').textContent = '달리기 준비!'; $('sNote').textContent = '곧 시작해요'; }
+  if (d.phase === 'raceCount') { clearLanes(); $('sBig').textContent = '달리기 준비!'; $('sNote').textContent = '곧 시작해요'; }
   if (d.phase === 'race') {
     raceEndAt = Date.now() + d.raceLeft;
     $('sNote').textContent = d.raceElapsed < d.raceHide * 1000 ? '누가 앞서 갈까요? 👀 잠시 뒤 1~5등이 공개돼요' : '1~5등만 보여요!';
   }
   if (d.phase === 'raceEnd') { $('sBig').textContent = d.raceRes.length ? `🏁 ${d.raceRes[0].name} 우승!` : '달리기 끝!'; $('sNote').textContent = '"순위 발표"를 눌러 주세요'; }
   if (['race', 'raceEnd'].includes(d.phase)) drawLanes(d);
-  else if (Object.keys(laneEls).length && !['raceCount'].includes(d.phase)) { for (const id of Object.keys(laneEls)) { laneEls[id].remove(); delete laneEls[id]; } }
+  else if (Object.keys(laneEls).length && d.phase !== 'raceCount') clearLanes();
 
   if (isRank) {   // 게임이 끝났을 때만 개인 순위를 보여줘요
     $('rkT').textContent = d.phase === 'quizRank' ? '🏆 초성 게임 순위' : d.phase === 'imgRank' ? '🏆 이미지 퀴즈 순위' : '🏆 달리기 순위';
