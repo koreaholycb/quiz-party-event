@@ -205,7 +205,7 @@ s.on('admin', d => {
   last = d;
   const free = ['idle', 'quizRank', 'raceRank', 'imgRank'].includes(d.phase), isRank = ['quizRank', 'raceRank', 'imgRank'].includes(d.phase);
   const isImg = ['img', 'imgWon', 'imgReveal'].includes(d.phase);
-  $('imgWarn').textContent = d.imgTodo && d.imgTodo.length ? `⚠ 이미지 게임: 아직 진짜 사진이 없는 문제 ${d.imgTodo.length}개 (${d.imgTodo.join(', ')})` : '이미지 게임: 모든 문제에 사진이 있어요 ✅';
+  $('imgWarn').textContent = d.imgTodo && d.imgTodo.length ? `⚠ 이미지 게임: 아직 진짜 사진이 없는 곳 ${d.imgTodo.length}군데 (${d.imgTodo.slice(0, 6).join(', ')}${d.imgTodo.length > 6 ? ' …' : ''})` : '이미지 게임: 모든 문제에 사진이 있어요 ✅';
   $('ph').textContent = NAMES[d.phase] || d.phase; $('ver').textContent = `화면 ${PAGE_V} · 서버 ${d.v || '?'}`;
   $('cn').textContent = `접속 ${d.online}명 / 등록 ${d.total}명`;
   $('st').disabled = !free; $('rc').disabled = !free; $('sp').disabled = free;
