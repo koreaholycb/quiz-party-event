@@ -18,8 +18,11 @@ function imgFile(name) {
 let _p = 0, _r = 0;
 const IMG_LABELS = IMGS.map(c => c.practice ? `연습 ${++_p}` : `문제 ${++_r}`);
 const PRACTICE_N = IMGS.filter(c => c.practice).length;
-const IMG_TODO = IMGS.map((c, i) => ({ label: IMG_LABELS[i], f: imgFile(c.img) }))
-  .filter(x => !fs.existsSync(path.join(IMG_ROOT, x.f)) || /\.svg$/i.test(x.f)).map(x => x.label);   // 아직 진짜 사진이 없는 문제 (서버가 켜질 때 한 번 확인)
+const ansName = c => c.answerImg || String(c.img).replace(/\.(jpe?g|png|webp|gif|avif|svg)$/i, '') + '-1';   // 정답확인용 사진 (없으면 q01 → q01-1)
+const imgBad = f => !fs.existsSync(path.join(IMG_ROOT, f)) || /\.svg$/i.test(f);                              // 진짜 사진이 아직 없음
+const ansFile = c => { const f = imgFile(ansName(c)); return fs.existsSync(path.join(IMG_ROOT, f)) ? f : imgFile(c.img); };   // 정답확인용이 없으면 문제용을 그대로
+const IMG_TODO = [];   // 아직 진짜 사진이 없는 문제 (서버가 켜질 때 한 번 확인)
+IMGS.forEach((c, i) => { if (imgBad(imgFile(c.img))) IMG_TODO.push(IMG_LABELS[i] + ' 문제용'); if (imgBad(imgFile(ansName(c)))) IMG_TODO.push(IMG_LABELS[i] + ' 정답확인용'); });
 console.log(IMG_TODO.length ? '⚠ 아직 진짜 사진이 없는 이미지 문제: ' + IMG_TODO.join(', ') : '이미지 게임: 모든 문제에 사진이 있어요');
 const app = express(), srv = http.createServer(app);
 const io = new Server(srv, { pingInterval: 10000, pingTimeout: 25000 });
@@ -71,7 +74,7 @@ function push(force) {
     v: VERSION, phase: S.phase, qn: isImg ? imgNo() : S.qn, qTotal: isImg ? IMGS.length - PRACTICE_N : QS.length, lastQ: isImg ? S.ii >= IMGS.length : S.qi >= QS.length,
     sec: QSEC, raceSec: RACE_SEC, raceHide: RACE_HIDE,
     q: hasQ ? { hint: S.q.hint, q: S.q.q, answer: S.phase === 'quizReveal' ? shown(S.q.a) : null }
-      : isImg ? { img: IMG_DIR + S.iq.img, answer: S.phase === 'imgReveal' ? shown(S.iq.a) : null } : null,
+      : isImg ? { img: IMG_DIR + (S.phase === 'imgReveal' ? S.iq.ansImg : S.iq.img), answer: S.phase === 'imgReveal' ? shown(S.iq.a) : null } : null,
     left: inQ ? Math.max(QSEC * 1000 - (now - S.qStart), 0) : 0,
     raceLeft: S.phase === 'race' ? Math.max(RACE_SEC * 1000 - elapsed, 0) : 0,
     raceElapsed: elapsed,
@@ -135,7 +138,7 @@ function startImg() {
 }
 function askImg() {
   const c = IMGS[S.ii++];
-  S.iq = { img: imgFile(c.img), a: c.a, practice: !!c.practice }; S.ik++; S.correct = {}; S.winner = null; S.awards = []; S.qStart = Date.now(); S.phase = 'img';
+  S.iq = { img: imgFile(c.img), ansImg: ansFile(c), a: c.a, practice: !!c.practice }; S.ik++; S.correct = {}; S.winner = null; S.awards = []; S.qStart = Date.now(); S.phase = 'img';
   S.gen++; clearTimeout(S.timer);
   io.emit('phase', phaseView()); push(true);
   const nx = IMGS[S.ii];   // 다음 이미지를 폰이 미리 받아 두면 공개할 때 바로 보여요
