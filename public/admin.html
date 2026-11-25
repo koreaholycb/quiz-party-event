@@ -213,8 +213,8 @@ s.on('admin', d => {
   $('nq').disabled = d.phase !== 'quizReveal';
   $('nq').textContent = d.lastQ ? '순위 발표 🏆' : '다음 문제 ▶';
   $('im').disabled = !(free || isImg);   // 하나의 버튼이 시작 → 정답 공개 → 다음 문제 순서로 바뀌어요
-  $('im').textContent = d.phase === 'img' || d.phase === 'imgWon' ? '정답 공개 ✔' : d.phase === 'imgReveal' ? (d.lastQ ? '순위 발표 🏆' : '다음 문제 ▶') : '이미지 게임 시작 ▶';
-  $('rk').disabled = !(d.phase === 'raceEnd' || ((d.phase === 'quizReveal' || d.phase === 'imgReveal') && !d.lastQ));
+  $('im').textContent = d.phase === 'img' || d.phase === 'imgWon' ? '정답 공개 ✔' : d.phase === 'imgReveal' ? (d.lastQ ? '순위 발표 🏆' : d.practice ? '본 게임 시작 ▶' : '다음 문제 ▶') : '이미지 게임 시작 ▶';
+  $('rk').disabled = !(d.phase === 'raceEnd' || (d.phase === 'quizReveal' && !d.lastQ) || (d.phase === 'imgReveal' && !d.lastQ && !d.practice));
 
   $('stage').hidden = isRank; $('rankcard').hidden = !isRank;
   $('qt').hidden = d.phase !== 'quiz';
@@ -232,6 +232,8 @@ s.on('admin', d => {
     $('sNote').textContent = d.offline
       ? (d.phase === 'img' ? '정답을 말로 외쳐 주세요! (제한시간 없음)' : d.awards.length ? '🥇 득점: ' + d.awards.map(a => a.name).join(', ') : '정답이 공개됐어요')
       : d.phase === 'imgReveal' ? '' : d.phase === 'imgWon' ? '곧 정답을 공개해요' : '정답을 입력해 주세요! (제한시간 없음)';
+    if (d.practice && d.phase === 'img') $('sNote').textContent = '📝 연습 문제 · ' + $('sNote').textContent;
+    if (!d.practice && d.qn === 1 && d.phase === 'img') $('sNote').textContent = '🎯 본 게임 시작! ' + $('sNote').textContent;
   }
   if (d.phase === 'quiz' && lastQn !== d.qn) {
     lastQn = d.qn;
