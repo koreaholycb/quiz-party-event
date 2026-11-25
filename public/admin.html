@@ -115,6 +115,7 @@ li.off{opacity:.5}
 
   <div class="card">
     <b>설정</b>
+    <p id="imgWarn" class="mut" style="margin:6px 0 0"></p>
     <div class="row" style="margin-top:12px">
       <button id="csv" class="g">점수 파일 저장(CSV)</button>
       <button id="rsc" class="g">점수만 초기화</button>
@@ -145,7 +146,7 @@ const runner = c => `<svg viewBox="0 0 44 66" aria-hidden="true">
 <g class="a1"><path d="M22 24 L11 36" stroke="#12122b" stroke-width="5" stroke-linecap="round" fill="none"/></g>
 <circle cx="22" cy="10" r="9" fill="#ffd9b0" stroke="#12122b" stroke-width="2.5"/>
 <circle cx="25.5" cy="9" r="1.5" fill="#12122b"/></svg>`;
-const PAGE_V = 'v7';
+const PAGE_V = 'v8';
 let pw = sessionStorage.getItem('pw') || '', last = null, lastQn = -1, raceEndAt = 0, awardOpen = false;
 const laneEls = {}, LANE = {};
 function clearLanes() { for (const id of Object.keys(laneEls)) { laneEls[id].remove(); delete laneEls[id]; delete LANE[id]; } }
@@ -204,6 +205,7 @@ s.on('admin', d => {
   last = d;
   const free = ['idle', 'quizRank', 'raceRank', 'imgRank'].includes(d.phase), isRank = ['quizRank', 'raceRank', 'imgRank'].includes(d.phase);
   const isImg = ['img', 'imgWon', 'imgReveal'].includes(d.phase);
+  $('imgWarn').textContent = d.imgTodo && d.imgTodo.length ? `⚠ 이미지 게임: 아직 진짜 사진이 없는 문제 ${d.imgTodo.length}개 (${d.imgTodo.join(', ')})` : '이미지 게임: 모든 문제에 사진이 있어요 ✅';
   $('ph').textContent = NAMES[d.phase] || d.phase; $('ver').textContent = `화면 ${PAGE_V} · 서버 ${d.v || '?'}`;
   $('cn').textContent = `접속 ${d.online}명 / 등록 ${d.total}명`;
   $('st').disabled = !free; $('rc').disabled = !free; $('sp').disabled = free;
@@ -218,7 +220,7 @@ s.on('admin', d => {
   $('qt').hidden = d.phase !== 'quiz';
   $('sImg').hidden = !isImg;
   const showAw = isImg && d.offline; $('aw').hidden = !showAw; $('awardcard').hidden = !(showAw && awardOpen); if (showAw && awardOpen) renderAward();
-  $('sProg').textContent = d.q ? `${d.qn}/${d.qTotal}번째 문제` : ''; $('sHint').textContent = d.q && d.q.hint ? '🏷️ ' + d.q.hint : ''; $('sWin').textContent = '';
+  $('sProg').textContent = d.q ? (d.practice ? `연습 문제 ${d.qn} (점수 없음)` : `${d.qn}/${d.qTotal}번째 문제`) : ''; $('sHint').textContent = d.q && d.q.hint ? '🏷️ ' + d.q.hint : ''; $('sWin').textContent = '';
   if (d.phase === 'idle') { $('sBig').textContent = '준비 완료'; $('sNote').textContent = `참가자를 기다리는 중 · ${d.online}명 접속`; }
   if (d.phase === 'quiz') { $('sBig').textContent = d.q.q; $('sNote').textContent = '정답을 입력해 주세요!'; }
   if (d.phase === 'quizWait') { $('sBig').textContent = d.q.q; $('sNote').textContent = '시간 종료! 곧 정답을 공개해요'; }
