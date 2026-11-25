@@ -6,6 +6,21 @@ const IMG_ROOT = [path.join(__dirname, 'image-game'), path.join(__dirname, 'imag
   .find(d => fs.existsSync(path.join(d, 'quiz.js'))) || path.join(__dirname, 'image-game');
 const { IMGS } = require(path.join(IMG_ROOT, 'quiz.js'));   // 이미지 게임 문제 목록
 console.log('이미지 게임 폴더:', IMG_ROOT);
+// 사진 파일 찾기: quiz.js 에 q01 처럼 확장자 없이 적어도, q01.jpg / .png / .webp … 중 올린 사진을 알아서 찾아요.
+// 진짜 사진이 있으면 그걸 쓰고, 없으면 리허설용 예시 그림(.svg)을 써요.
+const IMG_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'svg'];
+function imgFile(name) {
+  const files = fs.readdirSync(IMG_ROOT), base = String(name).replace(/\.(jpe?g|png|webp|gif|avif|svg)$/i, '').toLowerCase();
+  if (files.includes(name)) return name;
+  for (const e of IMG_EXTS) { const f = files.find(x => x.toLowerCase() === base + '.' + e); if (f) return f; }
+  return name;
+}
+let _p = 0, _r = 0;
+const IMG_LABELS = IMGS.map(c => c.practice ? `연습 ${++_p}` : `문제 ${++_r}`);
+const PRACTICE_N = IMGS.filter(c => c.practice).length;
+const IMG_TODO = IMGS.map((c, i) => ({ label: IMG_LABELS[i], f: imgFile(c.img) }))
+  .filter(x => !fs.existsSync(path.join(IMG_ROOT, x.f)) || /\.svg$/i.test(x.f)).map(x => x.label);   // 아직 진짜 사진이 없는 문제 (서버가 켜질 때 한 번 확인)
+console.log(IMG_TODO.length ? '⚠ 아직 진짜 사진이 없는 이미지 문제: ' + IMG_TODO.join(', ') : '이미지 게임: 모든 문제에 사진이 있어요');
 const app = express(), srv = http.createServer(app);
 const io = new Server(srv, { pingInterval: 10000, pingTimeout: 25000 });
 app.use(express.static('public'));
@@ -23,7 +38,7 @@ const IMG_ON_PHONE = false;          // 이미지 퀴즈: false면 관리자(큰
 const IMG_OFFLINE = false;           // true: 정답을 현장에서 말로 맞히고 관리자가 점수를 직접 줘요 / false: 폰에서 입력
 const IMG_POINTS = 80;               // 이미지 퀴즈: 가장 먼저 맞힌 1명이 받는 점수 (초성 1등 점수 50+30과 같게)
 const IMG_DIR = '/image-game/';
-const VERSION = 'v7';                // 화면 구석에 표시돼요 (올린 파일이 제대로 적용됐는지 확인용)
+const VERSION = 'v8';                // 화면 구석에 표시돼요 (올린 파일이 제대로 적용됐는지 확인용)
 const RACE_SEC = 15;                 // 달리기는 15초 고정
 const RACE_HIDE = 5;                 // 달리기 시작 후 이 시간(초) 동안은 관리자 화면에 아무것도 보여주지 않아요
 const TAP_POINT = 1;                 // 달리기: 터치 1번당 점수 (터치 횟수에 비례, 등수 보너스는 없어요)
@@ -38,10 +53,11 @@ const ranked = () => list().sort((a, b) => b.score - a.score);
 const free = () => ['idle', 'quizRank', 'raceRank', 'imgRank'].includes(S.phase);
 const top5 = () => list().filter(p => p.taps > 0).sort((a, b) => b.taps - a.taps).slice(0, 5);
 const IMG_PH = ['img', 'imgWon', 'imgReveal'];
+const imgNo = () => S.iq && S.iq.practice ? S.ik : S.ik - PRACTICE_N;   // 연습 문제는 1·2번, 본 문제는 1~20번으로 세요
 const phaseView = () => ({
-  v: VERSION, phase: S.phase, qn: IMG_PH.includes(S.phase) ? S.ik : S.qn, sec: QSEC,
+  v: VERSION, phase: S.phase, qn: IMG_PH.includes(S.phase) ? imgNo() : S.qn, sec: QSEC,
   q: ['quiz', 'quizWait'].includes(S.phase) ? { hint: S.q.hint, q: S.q.q }
-    : ['img', 'imgWon'].includes(S.phase) ? { img: IMG_ON_PHONE ? IMG_DIR + S.iq.img : null, offline: IMG_OFFLINE } : null,
+    : ['img', 'imgWon'].includes(S.phase) ? { img: IMG_ON_PHONE ? IMG_DIR + S.iq.img : null, offline: IMG_OFFLINE, k: S.ik, practice: !!S.iq.practice } : null,
   left: S.phase === 'quiz' ? Math.max(QSEC * 1000 - (Date.now() - S.qStart), 0) : 0,
 });
 
@@ -52,7 +68,7 @@ function push(force) {
   const elapsed = S.phase === 'race' ? now - S.raceStart : 0;
   const showTop = S.phase === 'raceEnd' || (S.phase === 'race' && elapsed >= RACE_HIDE * 1000);   // 처음 5초는 서버에서도 보내지 않아요
   io.to('admin').emit('admin', {
-    v: VERSION, phase: S.phase, qn: isImg ? S.ik : S.qn, qTotal: isImg ? IMGS.length : QS.length, lastQ: isImg ? S.ii >= IMGS.length : S.qi >= QS.length,
+    v: VERSION, phase: S.phase, qn: isImg ? imgNo() : S.qn, qTotal: isImg ? IMGS.length - PRACTICE_N : QS.length, lastQ: isImg ? S.ii >= IMGS.length : S.qi >= QS.length,
     sec: QSEC, raceSec: RACE_SEC, raceHide: RACE_HIDE,
     q: hasQ ? { hint: S.q.hint, q: S.q.q, answer: S.phase === 'quizReveal' ? shown(S.q.a) : null }
       : isImg ? { img: IMG_DIR + S.iq.img, answer: S.phase === 'imgReveal' ? shown(S.iq.a) : null } : null,
@@ -60,7 +76,7 @@ function push(force) {
     raceLeft: S.phase === 'race' ? Math.max(RACE_SEC * 1000 - elapsed, 0) : 0,
     raceElapsed: elapsed,
     correctN: Object.keys(S.correct).length, winner: S.winner, firstOnly: isImg ? true : QUIZ_FIRST_ONLY,
-    offline: IMG_OFFLINE, awards: isImg ? S.awards : [],
+    offline: IMG_OFFLINE, awards: isImg ? S.awards : [], practice: isImg && !!S.iq.practice, imgTodo: IMG_TODO,
     online: o.filter(p => p.sid).length, total: o.length,
     board: o.slice(0, 200).map(p => ({ id: p.id, name: p.name, score: p.score, gain: p.score - p.mark, on: !!p.sid })),
     raceTop: showTop ? top5().map(p => ({ id: p.id, name: p.name, taps: p.taps })) : [],
@@ -119,11 +135,11 @@ function startImg() {
 }
 function askImg() {
   const c = IMGS[S.ii++];
-  S.iq = { img: c.img, a: c.a }; S.ik++; S.correct = {}; S.winner = null; S.awards = []; S.qStart = Date.now(); S.phase = 'img';
+  S.iq = { img: imgFile(c.img), a: c.a, practice: !!c.practice }; S.ik++; S.correct = {}; S.winner = null; S.awards = []; S.qStart = Date.now(); S.phase = 'img';
   S.gen++; clearTimeout(S.timer);
   io.emit('phase', phaseView()); push(true);
   const nx = IMGS[S.ii];   // 다음 이미지를 폰이 미리 받아 두면 공개할 때 바로 보여요
-  if (nx && IMG_ON_PHONE) io.emit('preload', IMG_DIR + nx.img);
+  if (nx && IMG_ON_PHONE) io.emit('preload', IMG_DIR + imgFile(nx.img));
 }
 function revealImg() {
   S.phase = 'imgReveal';
@@ -186,7 +202,7 @@ io.on('connection', s => {
     const cur = inImg ? S.iq : S.q;
     if (!cur.a.some(a => norm(a.replace(/^~/, '')) === norm(t))) return cb(false);
     if (!inImg && QUIZ_FIRST_ONLY && S.winner) return cb(false);   // 초성 퀴즈 최초 정답자 방식(선택)
-    const g = inImg ? IMG_POINTS : QUIZ_BASE + Math.max(QUIZ_SPEED_MAX - Object.keys(S.correct).length * QUIZ_SPEED_STEP, 0);   // 기본 점수 + 빨리 맞힌 순서 추가 점수
+    const g = inImg ? (S.iq.practice ? 0 : IMG_POINTS) : QUIZ_BASE + Math.max(QUIZ_SPEED_MAX - Object.keys(S.correct).length * QUIZ_SPEED_STEP, 0);   // 기본 점수 + 빨리 맞힌 순서 추가 점수
     if (!S.winner) S.winner = me.name;
     me.score += g; S.correct[me.id] = g; cb(true);                 // 점수는 관리자 화면에만 보여요
     if (inImg) { S.phase = 'imgWon'; io.emit('phase', phaseView()); push(true); }   // 모든 화면에 "정답자가 나왔어요"
