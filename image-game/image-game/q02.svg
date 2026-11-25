@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
-<rect width="800" height="500" fill="#4db6ac"/>
-<text x="400" y="290" font-size="220" text-anchor="middle">🐘</text>
-<text x="400" y="440" font-size="40" text-anchor="middle" fill="#fff" font-family="sans-serif">예시 이미지 2 (리허설용)</text>
+<rect width="800" height="500" fill="#77d898"/>
+<text x="400" y="270" font-size="120" text-anchor="middle" fill="#ffffff" font-family="sans-serif" font-weight="bold">문제 2</text>
+<text x="400" y="400" font-size="36" text-anchor="middle" fill="#ffffff" font-family="sans-serif">(리허설용 그림 · 진짜 사진을 올리면 자동으로 바뀌어요)</text>
 </svg>
