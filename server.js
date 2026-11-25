@@ -120,7 +120,7 @@ function next() {   // 다음 문제. 마지막 문제였다면 순위 발표로
 function rank() {   // 게임이 끝났을 때 관리자 화면에 순위 발표
   if (S.phase === 'quizReveal') S.phase = 'quizRank';
   else if (S.phase === 'raceEnd') S.phase = 'raceRank';
-  else if (S.phase === 'imgReveal') S.phase = 'imgRank';
+  else if (S.phase === 'imgReveal' && !(S.iq.practice && S.ii < IMGS.length)) S.phase = 'imgRank';   // 연습 문제 직후에는 순위 발표로 건너뛸 수 없어요 (다음은 본 게임)
   else return;
   io.emit('phase', phaseView()); push(true);
 }
